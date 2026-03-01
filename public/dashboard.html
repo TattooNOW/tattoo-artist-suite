@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TattooNOW — Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Tokens ──────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:            hsl(210, 25%, 5%);
+      --card:          hsl(210, 22%, 8%);
+      --card-hover:    hsl(210, 18%, 12%);
+      --surface:       hsl(210, 20%, 10%);
+      --border:        hsl(210, 15%, 16%);
+
+      /* Status palette */
+      --inactive:      hsl(210, 10%, 30%);
+      --inactive-bg:   hsl(210, 12%, 10%);
+      --setup:         hsl(197, 98%, 23%);
+      --setup-light:   hsl(197, 80%, 35%);
+      --active:        hsl(25, 95%, 53%);
+      --active-glow:   hsl(25, 100%, 45%);
+
+      /* Health palette */
+      --health-good:   hsl(142, 72%, 40%);
+      --health-warn:   hsl(45, 95%, 50%);
+      --health-crit:   hsl(0, 72%, 51%);
+
+      --fg:            hsl(200, 20%, 92%);
+      --muted:         hsl(210, 12%, 55%);
+      --radius:        0.5rem;
+      --font-display:  'Archivo Black', sans-serif;
+      --font-body:     'DM Sans', sans-serif;
+      --font-mono:     'JetBrains Mono', monospace;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--font-display);
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+    }
+
+    .text-gradient {
+      background: linear-gradient(135deg, var(--setup), var(--active));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Ticker Tape ─────────────────────────────────── */
+    .ticker-wrap {
+      background: hsl(210, 22%, 6%);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      white-space: nowrap;
+      position: relative;
+      height: 38px;
+    }
+    .ticker-wrap::before,
+    .ticker-wrap::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 60px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .ticker-wrap::before {
+      left: 0;
+      background: linear-gradient(90deg, hsl(210, 22%, 6%), transparent);
+    }
+    .ticker-wrap::after {
+      right: 0;
+      background: linear-gradient(-90deg, hsl(210, 22%, 6%), transparent);
+    }
+
+    .ticker-track {
+      display: inline-flex;
+      align-items: center;
+      height: 38px;
+      animation: ticker-scroll 35s linear infinite;
+    }
+    .ticker-track:hover { animation-play-state: paused; }
+    @keyframes ticker-scroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .ticker-val {
+      color: var(--fg);
+      font-weight: 600;
+    }
+    .ticker-sep {
+      color: hsl(210, 10%, 22%);
+      margin: 0 0.25rem;
+    }
+
+    /* ── Dashboard Shell ─────────────────────────────── */
+    .dashboard {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem;
+    }
+
+    .dash-header {
+      margin-bottom: 1.5rem;
+    }
+    .dash-header h1 {
+      font-size: 1.4rem;
+    }
+    .dash-sub {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-top: 0.2rem;
+    }
+
+    .dash-main {
+      display: flex;
+      gap: 1.25rem;
+      align-items: flex-start;
+    }
+    @media (max-width: 920px) {
+      .dash-main { flex-direction: column; }
+    }
+
+    /* ── Circuit Board ───────────────────────────────── */
+    .pcb {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      /* Subtle PCB substrate grid */
+      background-image:
+        linear-gradient(hsl(210, 15%, 11%) 1px, transparent 1px),
+        linear-gradient(90deg, hsl(210, 15%, 11%) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    .pcb-label {
+      font-family: var(--font-display);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .pcb-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Node rows & trace rows */
+    .pcb-node-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pcb-vtrace-row {
+      display: flex;
+      justify-content: center;
+    }
+
+    /* ── Circuit Node ────────────────────────────────── */
+    .node {
+      width: 130px;
+      min-height: 120px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.6rem 0.5rem;
+      background: var(--card);
+      text-align: center;
+      position: relative;
+      transition: all 0.3s ease;
+      cursor: default;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.15rem;
+    }
+
+    .node[data-status="inactive"] {
+      border-color: hsl(210, 10%, 18%);
+      opacity: 0.45;
+    }
+    .node[data-status="needs-setup"] {
+      border-color: var(--setup);
+      cursor: pointer;
+    }
+    .node[data-status="needs-setup"]:hover {
+      background: hsl(197, 98%, 23% / 0.08);
+      box-shadow: 0 0 20px hsl(197, 80%, 35% / 0.25);
+    }
+    .node[data-status="active"] {
+      border-color: var(--active);
+    }
+    @keyframes pulse-active {
+      0%, 100% { box-shadow: 0 0 8px hsl(25, 95%, 53% / 0.12); }
+      50%      { box-shadow: 0 0 22px hsl(25, 95%, 53% / 0.28); }
+    }
+    .node[data-status="active"] {
+      animation: pulse-active 3s ease-in-out infinite;
+    }
+
+    .node-icon { font-size: 1.4rem; }
+    .node-name {
+      font-size: 0.7rem;
+      font-weight: 700;
+      line-height: 1.15;
+      color: var(--fg);
+    }
+    .node[data-status="inactive"] .node-name { color: var(--muted); }
+
+    /* Health bar — thin strip under the icon */
+    .node-health {
+      width: 32px;
+      height: 4px;
+      border-radius: 2px;
+      margin: 2px 0;
+    }
+    .node-health[data-health="good"]     { background: var(--health-good); box-shadow: 0 0 6px hsl(142, 72%, 40% / 0.4); }
+    .node-health[data-health="warning"]  { background: var(--health-warn); box-shadow: 0 0 6px hsl(45, 95%, 50% / 0.4); }
+    .node-health[data-health="critical"] { background: var(--health-crit); box-shadow: 0 0 6px hsl(0, 72%, 51% / 0.4); }
+    .node-health[data-health="none"]     { background: var(--border); opacity: 0.3; }
+
+    /* Status indicator */
+    .node-status {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.58rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .status-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+    .node[data-status="inactive"] .node-status  { color: var(--inactive); }
+    .node[data-status="inactive"] .status-dot   { background: var(--inactive); }
+    .node[data-status="needs-setup"] .node-status { color: var(--setup-light); }
+    .node[data-status="needs-setup"] .status-dot  { background: var(--setup); }
+    .node[data-status="active"] .node-status    { color: var(--active); }
+    .node[data-status="active"] .status-dot     { background: var(--active); }
+
+    /* Stat readout on active nodes */
+    .node-stat {
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--active);
+      line-height: 1;
+    }
+    .node-stat-label {
+      font-size: 0.55rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* CTA on setup nodes */
+    .node-cta {
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: var(--setup);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-top: 0.1rem;
+    }
+
+    /* Lock on inactive nodes */
+    .node-lock {
+      font-size: 0.58rem;
+      color: var(--inactive);
+    }
+
+    /* Connection pads */
+    .pad {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    .pad.r { right: -5px; top: 50%; transform: translateY(-50%); }
+    .pad.l { left: -5px;  top: 50%; transform: translateY(-50%); }
+    .pad.b { bottom: -5px; left: 50%; transform: translateX(-50%); }
+    .pad.t { top: -5px;    left: 50%; transform: translateX(-50%); }
+    .node[data-status="active"] .pad      { background: var(--active); }
+    .node[data-status="needs-setup"] .pad { background: var(--setup); }
+
+    /* ── Traces ──────────────────────────────────────── */
+    .trace { flex-shrink: 0; border-radius: 1px; }
+    .trace.h { width: 22px; height: 3px; }
+    .trace.v { width: 3px;  height: 22px; }
+
+    .trace[data-ts="active"]     { background: var(--active);  box-shadow: 0 0 8px hsl(25, 95%, 53% / 0.35); }
+    .trace[data-ts="needs-setup"]{ background: var(--setup); }
+    .trace[data-ts="inactive"]   { background: var(--inactive); opacity: 0.25; }
+
+    /* Vertical-trace row helpers */
+    .vtrace-cell {
+      width: 130px;
+      display: flex;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .vtrace-gap {
+      width: 22px;
+      flex-shrink: 0;
+    }
+
+    /* ── Legend ───────────────────────────────────────── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 1.25rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+    .legend-swatch {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      border: 2px solid;
+    }
+    .legend-swatch.sw-inactive { border-color: var(--inactive); }
+    .legend-swatch.sw-setup    { border-color: var(--setup);    background: hsl(197, 98%, 23% / 0.2); }
+    .legend-swatch.sw-active   { border-color: var(--active);   background: hsl(25, 95%, 53% / 0.2); }
+    .legend-bar {
+      width: 16px; height: 4px; border-radius: 2px;
+    }
+    .legend-bar.lb-good { background: var(--health-good); }
+    .legend-bar.lb-warn { background: var(--health-warn); }
+    .legend-bar.lb-crit { background: var(--health-crit); }
+
+    /* ── Professional Growth Sidebar ─────────────────── */
+    .sidebar {
+      width: 270px;
+      flex-shrink: 0;
+    }
+    @media (max-width: 920px) {
+      .sidebar { width: 100%; }
+    }
+
+    .sidebar-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.15rem;
+      margin-bottom: 1rem;
+    }
+
+    .sidebar-label {
+      font-family: var(--font-display);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .sidebar-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .bp-section {
+      margin-bottom: 0.85rem;
+    }
+    .bp-section:last-child { margin-bottom: 0; }
+    .bp-section-title {
+      font-family: var(--font-display);
+      font-size: 0.72rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .bp-item {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.5rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 0.35rem;
+      background: var(--card);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .bp-item:hover {
+      border-color: var(--setup-light);
+      background: var(--card-hover);
+    }
+    .bp-icon { font-size: 1rem; }
+    .bp-info { flex: 1; min-width: 0; }
+    .bp-name {
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .bp-desc {
+      font-size: 0.62rem;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .bp-badge {
+      font-size: 0.56rem;
+      padding: 2px 6px;
+      border-radius: 99px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .bp-badge.always { background: hsl(142, 72%, 40% / 0.12); color: var(--health-good); }
+    .bp-badge.action { background: hsl(25, 95%, 53% / 0.12); color: var(--active); }
+
+    /* ── Tooltip ──────────────────────────────────────── */
+    .tooltip {
+      position: fixed;
+      padding: 0.5rem 0.75rem;
+      background: hsl(210, 22%, 14%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.72rem;
+      color: var(--fg);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 50;
+      max-width: 200px;
+      line-height: 1.4;
+    }
+    .tooltip.visible { opacity: 1; }
+    .tooltip-label {
+      font-weight: 700;
+      margin-bottom: 0.15rem;
+    }
+    .tooltip-health {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.65rem;
+      margin-top: 0.2rem;
+    }
+    .tooltip-health-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+
+    /* ── Responsive ───────────────────────────────────── */
+    @media (max-width: 720px) {
+      .node       { width: 90px; min-height: 95px; padding: 0.45rem; }
+      .node-icon  { font-size: 1.1rem; }
+      .node-name  { font-size: 0.6rem; }
+      .node-stat  { font-size: 0.78rem; }
+      .trace.h    { width: 12px; }
+      .trace.v    { height: 12px; }
+      .vtrace-cell{ width: 90px; }
+      .vtrace-gap { width: 12px; }
+    }
+    @media (max-width: 480px) {
+      .node         { width: 68px; min-height: 72px; padding: 0.35rem; }
+      .node-icon    { font-size: 0.95rem; }
+      .node-name    { font-size: 0.5rem; }
+      .node-stat    { font-size: 0.68rem; }
+      .node-health  { width: 20px; }
+      .node-status  { display: none; }
+      .node-cta     { display: none; }
+      .trace.h      { width: 5px; }
+      .trace.v      { height: 5px; }
+      .vtrace-cell  { width: 68px; }
+      .vtrace-gap   { width: 5px; }
+      .dashboard    { padding: 0.6rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═════════════════════════════════════════════════════ -->
+<!-- Ticker Tape                                          -->
+<!-- ═════════════════════════════════════════════════════ -->
+<div class="ticker-wrap">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<!-- ═════════════════════════════════════════════════════ -->
+<!-- Dashboard                                            -->
+<!-- ═════════════════════════════════════════════════════ -->
+<div class="dashboard">
+  <div class="dash-header">
+    <h1>Your <span class="text-gradient">Command Center</span></h1>
+    <p class="dash-sub">Every tool in your suite — activate, monitor health, and grow.</p>
+  </div>
+
+  <div class="dash-main">
+    <!-- ── Circuit Board ──────────────────────────── -->
+    <div class="pcb">
+      <div class="pcb-label">Tool Suite</div>
+      <div id="circuitGrid"></div>
+
+      <div class="legend">
+        <div class="legend-item"><span class="legend-swatch sw-inactive"></span> Needs Upgrade</div>
+        <div class="legend-item"><span class="legend-swatch sw-setup"></span> Ready to Set Up</div>
+        <div class="legend-item"><span class="legend-swatch sw-active"></span> Active</div>
+        <span style="border-left:1px solid var(--border); margin:0 0.25rem;"></span>
+        <div class="legend-item"><span class="legend-bar lb-good"></span> Healthy</div>
+        <div class="legend-item"><span class="legend-bar lb-warn"></span> Needs Attention</div>
+        <div class="legend-item"><span class="legend-bar lb-crit"></span> Action Required</div>
+      </div>
+    </div>
+
+    <!-- ── Living Business Plan Sidebar ───────────── -->
+    <div class="sidebar">
+      <div class="sidebar-card">
+        <div class="sidebar-label">Living Business Plan</div>
+        <div id="bpSections"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   TattooNOW Command Center — Circuit Board Dashboard
+   ═══════════════════════════════════════════════════════════ */
+
+// ── URL Params ──────────────────────────────────────────
+const params = new URLSearchParams(window.location.search);
+const LOCATION_ID = params.get('locationId') || params.get('location_id') || '';
+
+// ── Tool Definitions ────────────────────────────────────
+// status:  'active' | 'needs-setup' | 'inactive'
+// health:  'good' | 'warning' | 'critical' | 'none'
+//   good     = tool is performing well
+//   warning  = needs attention (e.g. low open rate, stale content)
+//   critical = something is broken or severely underperforming
+//   none     = not applicable (inactive/not set up)
+const TOOLS = {
+  'website':         { name: 'Website',        icon: '\u{1F310}', status: 'active',      health: 'good',     stat: { value: '1,247', label: 'Visitors/mo' }, healthTip: 'SEO score 92 — pages loading fast' },
+  'funnels':         { name: 'Sales Funnels',  icon: '\u{1F3AF}', status: 'needs-setup', health: 'none',     stat: null,                                      healthTip: 'Set up to start tracking' },
+  'post-scheduler':  { name: 'Post Scheduler', icon: '\u{1F4F1}', status: 'active',      health: 'warning',  stat: { value: '23', label: 'Scheduled' },        healthTip: 'Only 2 posts left after this week — queue more' },
+  'email-marketing': { name: 'Email Mktg',     icon: '\u{1F4E7}', status: 'needs-setup', health: 'none',     stat: null,                                      healthTip: 'Set up to start tracking' },
+  'reputation':      { name: 'Reputation',     icon: '\u2B50',    status: 'active',      health: 'good',     stat: { value: '4.8\u2605', label: '47 Reviews' }, healthTip: '3 new 5-star reviews this week' },
+  'crm':             { name: 'CRM',            icon: '\u{1F4CB}', status: 'active',      health: 'warning',  stat: { value: '342', label: 'Contacts' },        healthTip: '18 contacts missing email — clean up list' },
+  'one-box':         { name: 'One-Box',        icon: '\u{1F4AC}', status: 'active',      health: 'critical', stat: { value: '12', label: 'Unread' },           healthTip: '3 messages over 48 hrs old — respond ASAP' },
+  'ivr':             { name: 'IVR Phone',      icon: '\u{1F4DE}', status: 'needs-setup', health: 'none',     stat: null,                                      healthTip: 'Set up to start tracking' },
+  'calendars':       { name: 'Calendars',      icon: '\u{1F4C5}', status: 'active',      health: 'good',     stat: { value: '3', label: 'Today' },             healthTip: 'No double-books — calendar synced' },
+  'appointments':    { name: 'Appointments',   icon: '\u2705',    status: 'active',      health: 'good',     stat: { value: '18', label: 'This Week' },        healthTip: '94% show rate — well above average' },
+  'text-to-pay':     { name: 'Text-to-Pay',    icon: '\u{1F4B3}', status: 'needs-setup', health: 'none',     stat: null,                                      healthTip: 'Set up to start collecting' },
+  'payments':        { name: 'Payments',       icon: '\u{1F4B0}', status: 'active',      health: 'good',     stat: { value: '$12.4k', label: 'MTD' },          healthTip: 'All deposits processing — no failures' },
+};
+
+// Grid: 3 rows × 4 columns
+// Row 1 = Attract   |  Row 2 = Engage   |  Row 3 = Convert
+const GRID = [
+  ['website',    'funnels',      'post-scheduler', 'email-marketing'],
+  ['reputation', 'crm',          'one-box',        'ivr'],
+  ['calendars',  'appointments', 'text-to-pay',    'payments'],
+];
+
+// ── Trace Status Logic ──────────────────────────────────
+const STATUS_RANK = { 'inactive': 0, 'needs-setup': 1, 'active': 2 };
+function traceStatus(a, b) {
+  const min = Math.min(STATUS_RANK[TOOLS[a]?.status || 'inactive'],
+                       STATUS_RANK[TOOLS[b]?.status || 'inactive']);
+  return ['inactive', 'needs-setup', 'active'][min];
+}
+
+// ── Render: Circuit Board ───────────────────────────────
+function renderBoard() {
+  const grid = document.getElementById('circuitGrid');
+  grid.innerHTML = '';
+
+  GRID.forEach((row, ri) => {
+    // — Node row
+    const nodeRow = document.createElement('div');
+    nodeRow.className = 'pcb-node-row';
+
+    row.forEach((tid, ci) => {
+      const t = TOOLS[tid];
+
+      // Build node
+      const n = document.createElement('div');
+      n.className = 'node';
+      n.dataset.status = t.status;
+      n.dataset.tool = tid;
+
+      let html = '';
+      html += '<div class="node-icon">' + t.icon + '</div>';
+      html += '<div class="node-name">' + t.name + '</div>';
+      html += '<div class="node-health" data-health="' + t.health + '"></div>';
+
+      if (t.status === 'active' && t.stat) {
+        html += '<div class="node-stat">' + t.stat.value + '</div>';
+        html += '<div class="node-stat-label">' + t.stat.label + '</div>';
+      } else if (t.status === 'needs-setup') {
+        html += '<div class="node-status"><span class="status-dot"></span> Ready</div>';
+        html += '<div class="node-cta">Set Up \u2192</div>';
+      } else if (t.status === 'inactive') {
+        html += '<div class="node-status"><span class="status-dot"></span> Locked</div>';
+        html += '<div class="node-lock">\u{1F512} Upgrade</div>';
+      }
+
+      // Pads
+      if (ci < row.length - 1) html += '<span class="pad r"></span>';
+      if (ci > 0)              html += '<span class="pad l"></span>';
+      if (ri < GRID.length - 1) html += '<span class="pad b"></span>';
+      if (ri > 0)               html += '<span class="pad t"></span>';
+
+      n.innerHTML = html;
+
+      // Tooltip on hover
+      n.addEventListener('mouseenter', (e) => showTooltip(e, t));
+      n.addEventListener('mousemove', moveTooltip);
+      n.addEventListener('mouseleave', hideTooltip);
+
+      nodeRow.appendChild(n);
+
+      // Horizontal trace
+      if (ci < row.length - 1) {
+        const tr = document.createElement('div');
+        tr.className = 'trace h';
+        tr.dataset.ts = traceStatus(tid, row[ci + 1]);
+        nodeRow.appendChild(tr);
+      }
+    });
+
+    grid.appendChild(nodeRow);
+
+    // — Vertical trace row
+    if (ri < GRID.length - 1) {
+      const vRow = document.createElement('div');
+      vRow.className = 'pcb-vtrace-row';
+
+      row.forEach((tid, ci) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'vtrace-cell';
+        const tr = document.createElement('div');
+        tr.className = 'trace v';
+        tr.dataset.ts = traceStatus(tid, GRID[ri + 1][ci]);
+        wrap.appendChild(tr);
+        vRow.appendChild(wrap);
+
+        if (ci < row.length - 1) {
+          const gap = document.createElement('div');
+          gap.className = 'vtrace-gap';
+          vRow.appendChild(gap);
+        }
+      });
+
+      grid.appendChild(vRow);
+    }
+  });
+}
+
+// ── Tooltip ─────────────────────────────────────────────
+const tooltipEl = document.getElementById('tooltip');
+
+function showTooltip(e, tool) {
+  const healthLabel = { good: 'Healthy', warning: 'Needs Attention', critical: 'Action Required', none: 'N/A' };
+  const healthColor = { good: 'var(--health-good)', warning: 'var(--health-warn)', critical: 'var(--health-crit)', none: 'var(--muted)' };
+
+  tooltipEl.innerHTML = `
+    <div class="tooltip-label">${tool.icon} ${tool.name}</div>
+    <div style="font-size:0.65rem;color:var(--muted);">${tool.healthTip}</div>
+    <div class="tooltip-health">
+      <span class="tooltip-health-dot" style="background:${healthColor[tool.health]};"></span>
+      ${healthLabel[tool.health]}
+    </div>
+  `;
+  tooltipEl.classList.add('visible');
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  tooltipEl.style.left = (e.clientX + 14) + 'px';
+  tooltipEl.style.top  = (e.clientY + 14) + 'px';
+}
+function hideTooltip() {
+  tooltipEl.classList.remove('visible');
+}
+
+// ── Living Business Plan Sidebar ────────────────────────
+// These map to the pro-dev / strategic categories — always active
+const BP_SECTIONS = [
+  {
+    title: '\u{1F465} Grow Your Team',
+    items: [
+      { icon: '\u{1F3A8}', name: 'Multi-Artist Mgmt', desc: 'Calendars, permissions & payouts per artist', badge: 'always' },
+      { icon: '\u{1F50D}', name: 'Artist Recruiting',  desc: 'TattooNOW placement network', badge: 'always' },
+    ],
+  },
+  {
+    title: '\u{1F3C6} Level Up',
+    items: [
+      { icon: '\u{1F399}', name: 'Business Roundtable', desc: 'Weekly strategy & peer networking', badge: 'always' },
+      { icon: '\u{1F91D}', name: '1-on-1 Consulting',   desc: 'Expert business guidance', badge: 'always' },
+      { icon: '\u{1F4DA}', name: 'RIT Courses',         desc: 'Professional development library', badge: 'always' },
+    ],
+  },
+  {
+    title: '\u{1F4CA} Business Plan',
+    items: [
+      { icon: '\u{1F4DD}', name: 'Living Business Plan', desc: 'Roadmap, goals & benchmarks — always evolving', badge: 'action' },
+      { icon: '\u{1F4C8}', name: 'Growth Scorecard',     desc: 'Monthly metrics review against your plan', badge: 'action' },
+    ],
+  },
+];
+
+function renderSidebar() {
+  const container = document.getElementById('bpSections');
+  container.innerHTML = '';
+
+  BP_SECTIONS.forEach(section => {
+    const sec = document.createElement('div');
+    sec.className = 'bp-section';
+
+    const title = document.createElement('div');
+    title.className = 'bp-section-title';
+    title.textContent = section.title;
+    sec.appendChild(title);
+
+    section.items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'bp-item';
+      el.innerHTML = `
+        <span class="bp-icon">${item.icon}</span>
+        <div class="bp-info">
+          <div class="bp-name">${item.name}</div>
+          <div class="bp-desc">${item.desc}</div>
+        </div>
+        <span class="bp-badge ${item.badge}">${item.badge === 'always' ? 'Active' : 'Review'}</span>
+      `;
+      sec.appendChild(el);
+    });
+
+    container.appendChild(sec);
+  });
+}
+
+// ── Ticker Tape ─────────────────────────────────────────
+const TICKER_DATA = [
+  { icon: '\u{1F4C5}', label: 'Appointments Today', value: '3' },
+  { icon: '\u{1F4B0}', label: 'Revenue MTD',        value: '$12,400' },
+  { icon: '\u2B50',    label: 'Avg Rating',          value: '4.8\u2605' },
+  { icon: '\u{1F4C8}', label: 'New Leads',           value: '12 this week' },
+  { icon: '\u{1F4E7}', label: 'Email Open Rate',     value: '68%' },
+  { icon: '\u{1F4F1}', label: 'Posts Queued',        value: '23' },
+  { icon: '\u{1F4AC}', label: 'Unread Messages',     value: '12' },
+  { icon: '\u2705',    label: 'Bookings This Week',  value: '18' },
+  { icon: '\u{1F4B3}', label: 'Text-to-Pay Collected', value: '$840' },
+  { icon: '\u{1F50D}', label: 'Google Reviews',      value: '47 total' },
+];
+
+function renderTicker() {
+  const track = document.getElementById('tickerTrack');
+  let html = '';
+  // Duplicate for seamless infinite scroll
+  for (let copy = 0; copy < 2; copy++) {
+    TICKER_DATA.forEach((d, i) => {
+      html += '<span class="ticker-item">' + d.icon + ' ' + d.label + ': <span class="ticker-val">' + d.value + '</span></span>';
+      if (i < TICKER_DATA.length - 1) html += '<span class="ticker-sep">\u2502</span>';
+    });
+    if (copy === 0) html += '<span class="ticker-sep" style="margin:0 1.5rem;">\u2502</span>';
+  }
+  track.innerHTML = html;
+}
+
+// ── Initialize ──────────────────────────────────────────
+renderTicker();
+renderBoard();
+renderSidebar();
+</script>
+
+</body>
+</html>
