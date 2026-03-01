@@ -495,6 +495,45 @@
       border-radius: 50%;
     }
 
+    /* ── Studio Type Picker ──────────────────────────── */
+    .studio-picker {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.65rem;
+    }
+    .studio-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.3rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: var(--card);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .studio-chip:hover {
+      border-color: var(--setup-light);
+      color: var(--fg);
+    }
+    .studio-chip.active {
+      border-color: var(--active);
+      color: var(--active);
+      background: hsl(25, 95%, 53% / 0.08);
+    }
+
+    /* Upgrade callout on inactive nodes */
+    .node-upgrade-hint {
+      font-size: 0.52rem;
+      color: var(--inactive);
+      font-style: italic;
+      line-height: 1.2;
+      margin-top: 0.1rem;
+    }
+
     /* ── Responsive ───────────────────────────────────── */
     @media (max-width: 720px) {
       .node       { width: 90px; min-height: 95px; padding: 0.45rem; }
@@ -538,6 +577,7 @@
   <div class="dash-header">
     <h1>Your <span class="text-gradient">Command Center</span></h1>
     <p class="dash-sub">Every tool in your suite — activate, monitor health, and grow.</p>
+    <div class="studio-picker" id="studioPicker"></div>
   </div>
 
   <div class="dash-main">
@@ -578,15 +618,52 @@
 // ── URL Params ──────────────────────────────────────────
 const params = new URLSearchParams(window.location.search);
 const LOCATION_ID = params.get('locationId') || params.get('location_id') || '';
+let studioType = params.get('studioType') || params.get('studio_type') || 'solo';
 
-// ── Tool Definitions ────────────────────────────────────
+// ── Studio Type Profiles ────────────────────────────────
+// Defines which tools are included, which are upgrade-path,
+// and which sidebar sections appear for each studio type.
+const STUDIO_PROFILES = {
+  'solo': {
+    label: 'Solo Artist',
+    icon: '\u{1F3A8}',
+    // Tools available in this plan
+    included: ['website', 'funnels', 'post-scheduler', 'email-marketing', 'reputation', 'crm', 'one-box', 'calendars', 'appointments', 'text-to-pay', 'payments'],
+    // Tools shown as upgrade opportunities (visible but grayed)
+    upgrade: ['ivr'],
+    // Upgrade hints per tool (why they'd want it)
+    upgradeHints: {
+      'ivr': 'Pro plan — auto-attendant',
+    },
+    // Which sidebar sections to show
+    sidebarSections: ['level-up', 'business-plan'],
+    // Ticker items to exclude (not relevant for this type)
+    tickerExclude: [],
+  },
+  'multi-artist': {
+    label: 'Multi-Artist Studio',
+    icon: '\u{1F3E2}',
+    included: ['website', 'funnels', 'post-scheduler', 'email-marketing', 'reputation', 'crm', 'one-box', 'ivr', 'calendars', 'appointments', 'text-to-pay', 'payments'],
+    upgrade: [],
+    upgradeHints: {},
+    sidebarSections: ['grow-team', 'level-up', 'business-plan'],
+    tickerExclude: [],
+  },
+  'multi-location': {
+    label: 'Multi-Location',
+    icon: '\u{1F4CD}',
+    included: ['website', 'funnels', 'post-scheduler', 'email-marketing', 'reputation', 'crm', 'one-box', 'ivr', 'calendars', 'appointments', 'text-to-pay', 'payments'],
+    upgrade: [],
+    upgradeHints: {},
+    sidebarSections: ['grow-team', 'level-up', 'business-plan'],
+    tickerExclude: [],
+  },
+};
+
+// ── Tool Definitions (base state) ───────────────────────
 // status:  'active' | 'needs-setup' | 'inactive'
 // health:  'good' | 'warning' | 'critical' | 'none'
-//   good     = tool is performing well
-//   warning  = needs attention (e.g. low open rate, stale content)
-//   critical = something is broken or severely underperforming
-//   none     = not applicable (inactive/not set up)
-const TOOLS = {
+const BASE_TOOLS = {
   'website':         { name: 'Website',        icon: '\u{1F310}', status: 'active',      health: 'good',     stat: { value: '1,247', label: 'Visitors/mo' }, healthTip: 'SEO score 92 — pages loading fast' },
   'funnels':         { name: 'Sales Funnels',  icon: '\u{1F3AF}', status: 'needs-setup', health: 'none',     stat: null,                                      healthTip: 'Set up to start tracking' },
   'post-scheduler':  { name: 'Post Scheduler', icon: '\u{1F4F1}', status: 'active',      health: 'warning',  stat: { value: '23', label: 'Scheduled' },        healthTip: 'Only 2 posts left after this week — queue more' },
@@ -600,6 +677,30 @@ const TOOLS = {
   'text-to-pay':     { name: 'Text-to-Pay',    icon: '\u{1F4B3}', status: 'needs-setup', health: 'none',     stat: null,                                      healthTip: 'Set up to start collecting' },
   'payments':        { name: 'Payments',       icon: '\u{1F4B0}', status: 'active',      health: 'good',     stat: { value: '$12.4k', label: 'MTD' },          healthTip: 'All deposits processing — no failures' },
 };
+
+// ── Apply Studio Profile to Tools ───────────────────────
+// Clones base tools and overrides status based on the active profile
+let TOOLS = {};
+function applyStudioProfile() {
+  const profile = STUDIO_PROFILES[studioType] || STUDIO_PROFILES['solo'];
+  TOOLS = {};
+  for (const [id, base] of Object.entries(BASE_TOOLS)) {
+    TOOLS[id] = { ...base, stat: base.stat ? { ...base.stat } : null };
+    if (profile.upgrade.includes(id)) {
+      // Force inactive with upgrade hint
+      TOOLS[id].status = 'inactive';
+      TOOLS[id].health = 'none';
+      TOOLS[id].healthTip = profile.upgradeHints[id] || 'Available on upgrade';
+      TOOLS[id]._upgradeHint = profile.upgradeHints[id] || 'Upgrade to unlock';
+    } else if (!profile.included.includes(id)) {
+      // Not in plan at all
+      TOOLS[id].status = 'inactive';
+      TOOLS[id].health = 'none';
+      TOOLS[id].healthTip = 'Not in current plan';
+      TOOLS[id]._upgradeHint = 'Not in your plan';
+    }
+  }
+}
 
 // Grid: 3 rows × 4 columns
 // Row 1 = Attract   |  Row 2 = Engage   |  Row 3 = Convert
@@ -650,6 +751,9 @@ function renderBoard() {
       } else if (t.status === 'inactive') {
         html += '<div class="node-status"><span class="status-dot"></span> Locked</div>';
         html += '<div class="node-lock">\u{1F512} Upgrade</div>';
+        if (t._upgradeHint) {
+          html += '<div class="node-upgrade-hint">' + t._upgradeHint + '</div>';
+        }
       }
 
       // Pads
@@ -731,9 +835,18 @@ function hideTooltip() {
 }
 
 // ── Living Business Plan Sidebar ────────────────────────
-// These map to the pro-dev / strategic categories — always active
+// Each section has an id so studio profiles can filter them.
+// "Content & Growth" section has Instagram-to-Blog — available to ALL types.
 const BP_SECTIONS = [
   {
+    id: 'content-growth',
+    title: '\u{1F4F8} Content & Growth',
+    items: [
+      { icon: '\u{1F4F8}', name: 'Instagram \u2192 Blog', desc: 'Auto-convert your best posts into SEO blog articles', badge: 'action' },
+    ],
+  },
+  {
+    id: 'grow-team',
     title: '\u{1F465} Grow Your Team',
     items: [
       { icon: '\u{1F3A8}', name: 'Multi-Artist Mgmt', desc: 'Calendars, permissions & payouts per artist', badge: 'always' },
@@ -741,6 +854,7 @@ const BP_SECTIONS = [
     ],
   },
   {
+    id: 'level-up',
     title: '\u{1F3C6} Level Up',
     items: [
       { icon: '\u{1F399}', name: 'Business Roundtable', desc: 'Weekly strategy & peer networking', badge: 'always' },
@@ -749,6 +863,7 @@ const BP_SECTIONS = [
     ],
   },
   {
+    id: 'business-plan',
     title: '\u{1F4CA} Business Plan',
     items: [
       { icon: '\u{1F4DD}', name: 'Living Business Plan', desc: 'Roadmap, goals & benchmarks — always evolving', badge: 'action' },
@@ -761,7 +876,13 @@ function renderSidebar() {
   const container = document.getElementById('bpSections');
   container.innerHTML = '';
 
+  const profile = STUDIO_PROFILES[studioType] || STUDIO_PROFILES['solo'];
+  // content-growth is always shown for every studio type
+  const visibleIds = ['content-growth', ...profile.sidebarSections];
+
   BP_SECTIONS.forEach(section => {
+    if (!visibleIds.includes(section.id)) return;
+
     const sec = document.createElement('div');
     sec.className = 'bp-section';
 
@@ -816,7 +937,35 @@ function renderTicker() {
   track.innerHTML = html;
 }
 
+// ── Studio Type Picker ──────────────────────────────────
+function renderStudioPicker() {
+  const container = document.getElementById('studioPicker');
+  container.innerHTML = '';
+
+  Object.entries(STUDIO_PROFILES).forEach(([key, profile]) => {
+    const chip = document.createElement('button');
+    chip.className = 'studio-chip' + (key === studioType ? ' active' : '');
+    chip.textContent = profile.icon + ' ' + profile.label;
+    chip.onclick = () => switchStudioType(key);
+    container.appendChild(chip);
+  });
+}
+
+function switchStudioType(type) {
+  studioType = type;
+  applyStudioProfile();
+  renderStudioPicker();
+  renderBoard();
+  renderSidebar();
+  // Update URL without reload
+  const url = new URL(window.location);
+  url.searchParams.set('studioType', type);
+  history.replaceState(null, '', url);
+}
+
 // ── Initialize ──────────────────────────────────────────
+applyStudioProfile();
+renderStudioPicker();
 renderTicker();
 renderBoard();
 renderSidebar();
