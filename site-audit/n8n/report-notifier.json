@@ -1,0 +1,101 @@
+{
+  "name": "TattooNOW Report Notifier",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "audit-complete",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Audit Complete Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT s.business_name, s.domain, s.ghl_location_id, s.target_city, s.target_state,\n       a.audit_date, a.scores, a.delta, a.core30_coverage,\n       (SELECT count(*) FROM findings f WHERE f.audit_id = a.id AND f.status = 'open') as open_findings,\n       (SELECT count(*) FROM findings f WHERE f.audit_id = a.id AND f.severity = 'critical' AND f.status = 'open') as critical_findings\nFROM audits a\nJOIN sites s ON s.id = a.site_id\nWHERE a.id = '{{ $json.body.audit_id }}'\nLIMIT 1",
+        "options": {}
+      },
+      "id": "fetch-audit",
+      "name": "Fetch Audit Details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "REPLACE_ME", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $json;\nconst scores = a.scores || {};\nconst delta = a.delta || {};\nconst core30 = a.core30_coverage || {};\n\nconst deltaStr = (v) => v > 0 ? `+${v}` : v < 0 ? `${v}` : '—';\n\nconst dashboardUrl = `https://YOUR_DOMAIN/dashboard.html?locationId=${a.ghl_location_id}`;\n\nconst subject = `[Audit] ${a.business_name} — Score: ${scores.overall || '?'}/100 (${a.audit_date})`;\n\nconst body = `# Site Audit Report: ${a.business_name}\n**${a.domain}** • ${a.target_city || ''}, ${a.target_state || ''} • ${a.audit_date}\n\n## Scores\n| Metric | Score | Change |\n|--------|-------|--------|\n| Overall | ${scores.overall || '—'} | ${deltaStr(delta.overall)} |\n| SEO | ${scores.seo?.score || '—'} | ${deltaStr(delta.seo)} |\n| AI | ${scores.ai_discoverability?.score || 'null'} | ${deltaStr(delta.ai_discoverability)} |\n| GEO | ${scores.geo_readiness?.score || '—'} | ${deltaStr(delta.geo_readiness)} |\n\n## Findings\n- **${a.open_findings}** open findings\n- **${a.critical_findings}** critical issues\n\n## Core 30 Coverage\n- Categories: ${core30.categories_found || 0}/${core30.categories_total || 0}\n- Services: ${core30.services_found || 0}/${core30.services_total || 0}\n\n[View Full Dashboard](${dashboardUrl})\n`;\n\nreturn [{ json: { subject, body, dashboardUrl, business_name: a.business_name, domain: a.domain, overall_score: scores.overall, critical_findings: a.critical_findings } }];"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            { "leftValue": "={{ $json.critical_findings }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }
+          ]
+        }
+      },
+      "id": "has-critical",
+      "name": "Has Critical Issues?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "seo-team@tattoonow.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1180, 200],
+      "credentials": { "smtp": { "id": "REPLACE_ME", "name": "SMTP" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "seo-team@tattoonow.com",
+        "subject": "=⚠ CRITICAL: {{ $json.subject }}",
+        "emailType": "text",
+        "message": "=⚠ CRITICAL ISSUES FOUND\n\n{{ $json.body }}",
+        "options": { "priority": "high" }
+      },
+      "id": "send-urgent-email",
+      "name": "Send Urgent Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1180, 400],
+      "credentials": { "smtp": { "id": "REPLACE_ME", "name": "SMTP" } }
+    }
+  ],
+  "connections": {
+    "Audit Complete Webhook": { "main": [[{ "node": "Fetch Audit Details", "type": "main", "index": 0 }]] },
+    "Fetch Audit Details": { "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]] },
+    "Format Report": { "main": [[{ "node": "Has Critical Issues?", "type": "main", "index": 0 }]] },
+    "Has Critical Issues?": {
+      "main": [
+        [{ "node": "Send Urgent Email", "type": "main", "index": 0 }],
+        [{ "node": "Send Report Email", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "tattoonow-audit-v3" },
+  "tags": [{ "name": "site-audit" }, { "name": "notifications" }]
+}

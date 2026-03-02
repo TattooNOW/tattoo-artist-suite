@@ -1,0 +1,135 @@
+{
+  "name": "TattooNOW AI Prober",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 6 1,15 * *" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Bi-Monthly Probe",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": { "value": "public" },
+        "table": { "value": "sites" },
+        "returnAll": true
+      },
+      "id": "fetch-sites",
+      "name": "Fetch Sites",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "REPLACE_ME", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate probe queries for each site\nconst sites = $input.all();\nconst probes = [];\n\nfor (const site of sites) {\n  const s = site.json;\n  const city = s.target_city || s.city || '';\n  const state = s.target_state || s.state || '';\n  const name = s.business_name || '';\n  const kw = s.primary_keyword || 'tattoo shop';\n\n  const queries = [\n    `best ${kw} in ${city} ${state}`,\n    `top rated tattoo artists in ${city}`,\n    `${name} ${city} reviews`,\n    `where to get a tattoo in ${city} ${state}`,\n    `tattoo shops near me ${city}`\n  ];\n\n  for (const query of queries) {\n    for (const engine of ['chatgpt', 'perplexity', 'gemini']) {\n      probes.push({ json: { site_id: s.id, business_name: name, domain: s.domain, phone: s.phone, address: s.address, query, engine } });\n    }\n  }\n}\n\nreturn probes;"
+      },
+      "id": "generate-probes",
+      "name": "Generate Probes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": { "reset": false }
+      },
+      "id": "rate-limiter",
+      "name": "Rate Limiter",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "combinator": "or",
+          "conditions": [
+            { "leftValue": "={{ $json.engine }}", "rightValue": "chatgpt", "operator": { "type": "string", "operation": "equals" } }
+          ]
+        }
+      },
+      "id": "route-engine",
+      "name": "Route by Engine",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1180, 300],
+      "notes": "Route to ChatGPT, Perplexity, or Gemini HTTP nodes. For now all route to a single generic HTTP handler."
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a helpful assistant. Answer the user's question about local businesses.\"},\n    {\"role\": \"user\", \"content\": \"{{ $json.query }}\"}\n  ],\n  \"max_tokens\": 500\n}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "probe-chatgpt",
+      "name": "Probe ChatGPT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 200],
+      "continueOnFail": true,
+      "credentials": { "openAiApi": { "id": "REPLACE_ME", "name": "OpenAI API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze AI response for mentions of the business\nconst probe = $('Rate Limiter').first().json;\nconst response = $json.choices?.[0]?.message?.content || $json.error?.message || '';\nconst name = probe.business_name.toLowerCase();\nconst domain = (probe.domain || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/\\/$/, '');\n\nconst mentioned = response.toLowerCase().includes(name) || response.toLowerCase().includes(domain);\n\n// NAP accuracy check\nlet napAccurate = null;\nif (mentioned) {\n  const hasPhone = probe.phone ? response.includes(probe.phone) || response.includes(probe.phone.replace(/-/g, '')) : null;\n  const hasAddress = probe.address ? response.toLowerCase().includes(probe.address.toLowerCase()) : null;\n  napAccurate = hasPhone || hasAddress;\n}\n\n// Sentiment (basic)\nlet sentiment = null;\nif (mentioned) {\n  const positive = /recommend|great|excellent|best|top|amazing|skilled|talented/i;\n  const negative = /avoid|poor|bad|unprofessional|overpriced/i;\n  if (positive.test(response)) sentiment = 'positive';\n  else if (negative.test(response)) sentiment = 'negative';\n  else sentiment = 'neutral';\n}\n\nreturn [{ json: {\n  site_id: probe.site_id,\n  engine: probe.engine,\n  query: probe.query,\n  mentioned,\n  nap_accurate: napAccurate,\n  sentiment,\n  response_snippet: response.substring(0, 500),\n  checked_at: new Date().toISOString()\n}}];"
+      },
+      "id": "analyze-response",
+      "name": "Analyze Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": { "value": "public" },
+        "table": { "value": "ai_mentions" },
+        "columns": { "mappingMode": "autoMapInputData" },
+        "conflictColumns": ["site_id", "engine", "query"]
+      },
+      "id": "save-result",
+      "name": "Save to ai_mentions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1900, 300],
+      "credentials": { "postgres": { "id": "REPLACE_ME", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {},
+      "id": "wait-node",
+      "name": "Wait 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2140, 300],
+      "parameters_extra": { "amount": 3, "unit": "seconds" }
+    }
+  ],
+  "connections": {
+    "Bi-Monthly Probe": { "main": [[{ "node": "Fetch Sites", "type": "main", "index": 0 }]] },
+    "Fetch Sites": { "main": [[{ "node": "Generate Probes", "type": "main", "index": 0 }]] },
+    "Generate Probes": { "main": [[{ "node": "Rate Limiter", "type": "main", "index": 0 }]] },
+    "Rate Limiter": { "main": [[{ "node": "Route by Engine", "type": "main", "index": 0 }]] },
+    "Route by Engine": { "main": [[{ "node": "Probe ChatGPT", "type": "main", "index": 0 }]] },
+    "Probe ChatGPT": { "main": [[{ "node": "Analyze Response", "type": "main", "index": 0 }]] },
+    "Analyze Response": { "main": [[{ "node": "Save to ai_mentions", "type": "main", "index": 0 }]] },
+    "Save to ai_mentions": { "main": [[{ "node": "Wait 3s", "type": "main", "index": 0 }]] },
+    "Wait 3s": { "main": [[{ "node": "Rate Limiter", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "tattoonow-audit-v3" },
+  "tags": [{ "name": "site-audit" }, { "name": "ai-probes" }]
+}

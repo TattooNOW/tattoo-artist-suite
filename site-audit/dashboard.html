@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TattooNOW Audit Dashboard</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+  <script>window.PropTypes = window.PropTypes || window.propTypes;</script>
+  <script src="https://cdn.jsdelivr.net/npm/recharts@2/umd/Recharts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    body, html { margin:0; padding:0; background:#0a0a0a; color:#fafafa; font-family:'Roboto',sans-serif; }
+    h1,h2,h3,h4,h5 { font-family:'Roboto Slab',serif; }
+    a { color:#EA9320; }
+    .container { padding:20px; max-width:1200px; margin:0 auto; }
+    table { width:100%; border-collapse:collapse; }
+    table th { text-align:left; padding:8px 12px; border-bottom:2px solid #333; font-size:0.85rem; text-transform:uppercase; color:#888; letter-spacing:0.5px; }
+    table td { padding:6px 12px; border-bottom:1px solid #222; }
+    .card { background:#1a1a1a; padding:1.5rem; border-radius:8px; }
+    .score-card { flex:1; background:#1a1a1a; padding:1.5rem; border-radius:8px; text-align:center; }
+    .score-card h3 { margin:0 0 0.5rem 0; font-size:0.9rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
+    .score-card .value { font-size:2.5rem; font-weight:700; }
+    .score-card .delta { font-size:1rem; margin-top:0.25rem; }
+    .hero-metric { text-align:center; padding:2rem 1rem; margin-bottom:2rem; background:linear-gradient(135deg, #1a1a1a 0%, #111 100%); border-radius:12px; border:1px solid #333; }
+    .hero-metric .hero-value { font-size:5rem; font-weight:700; line-height:1; }
+    .hero-metric .hero-label { font-size:1.1rem; color:#888; margin-top:0.5rem; }
+    .hero-metric .hero-sub { font-size:0.9rem; color:#666; margin-top:0.25rem; }
+    .tab-bar { display:flex; gap:0; border-bottom:2px solid #333; margin-bottom:2rem; overflow-x:auto; }
+    .tab-btn {
+      padding:0.75rem 1.25rem; background:none; border:none; border-bottom:3px solid transparent;
+      color:#888; font-family:'Roboto',sans-serif; font-size:0.9rem; font-weight:500;
+      cursor:pointer; white-space:nowrap; transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn:hover { color:#ccc; }
+    .tab-btn.active { color:#EA9320; border-bottom-color:#EA9320; }
+    .tab-btn .badge {
+      display:inline-block; margin-left:0.5rem; padding:0.1rem 0.5rem; border-radius:10px;
+      font-size:0.75rem; font-weight:700; background:#333; color:#aaa;
+    }
+    .tab-btn.active .badge { background:#EA9320; color:#000; }
+    .grid-cell {
+      width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+      font-size:0.7rem; font-weight:700; border-radius:4px; border:1px solid #333;
+    }
+    .pill { display:inline-block; padding:0.15rem 0.6rem; border-radius:10px; font-size:0.75rem; font-weight:600; }
+    .progress-bar { background:#333; border-radius:4px; height:8px; overflow:hidden; }
+    .progress-fill { height:100%; border-radius:4px; transition:width 0.3s; }
+    select.filter { background:#1a1a1a; color:#fafafa; border:1px solid #333; padding:0.4rem 0.8rem; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="root">Loading...</div>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel">
+    const SUPABASE_URL = 'https://dwoqhaaugczqsymfirqu.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_YYTjG-yaVaj7bpfKyIJupw_ATKZvk0N';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    /* ── Helpers ─────────────────────────────────────────── */
+    const getDeltaArrow = v => v > 0 ? '\u25B2' : v < 0 ? '\u25BC' : '\u2014';
+    const deltaColor = v => v > 0 ? '#4ade80' : v < 0 ? '#f87171' : '#666';
+    const sevColor = s => ({ critical:'#ef4444', high:'#f87171', medium:'#fbbf24', low:'#60a5fa' }[s] || '#888');
+    const rankColor = r => {
+      if (r === null || r === undefined || r > 20) return '#333';
+      if (r <= 3) return '#4ade80'; if (r <= 7) return '#a3e635';
+      if (r <= 10) return '#fbbf24'; if (r <= 15) return '#f97316'; return '#f87171';
+    };
+    const rankBg = r => {
+      if (r === null || r === undefined || r > 20) return '#1a1a1a';
+      if (r <= 3) return 'rgba(74,222,128,0.15)'; if (r <= 7) return 'rgba(163,230,53,0.12)';
+      if (r <= 10) return 'rgba(251,191,36,0.12)'; if (r <= 15) return 'rgba(249,115,22,0.12)'; return 'rgba(248,113,113,0.12)';
+    };
+    const statusIcon = s => s === 'listed' ? '\u2705' : (s === 'needs_fix' || s === 'needs_claim') ? '\u26A0\uFE0F' : '\u274C';
+    const statusLabel = s => ({ listed:'Listed', needs_fix:'Needs Fix', needs_claim:'Needs Claim', not_listed:'Not Listed' }[s] || s);
+    const statusRowBg = s => ({ listed:'rgba(74,222,128,0.08)', needs_fix:'rgba(251,191,36,0.08)', needs_claim:'rgba(251,191,36,0.08)', not_listed:'rgba(248,113,113,0.08)' }[s] || 'transparent');
+    const priorityColor = p => ({ P0:'#ef4444', P1:'#fbbf24', P2:'#60a5fa' }[p] || '#888');
+
+    /* ── Tab: Overview ───────────────────────────────────── */
+    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, lastAuditDate }) {
+      const seo = scores.seo?.score ?? '\u2014';
+      const ai = scores.ai_discoverability?.score ?? '\u2014';
+      const geo = scores.geo_readiness?.score ?? '\u2014';
+
+      return (
+        <div>
+          {/* Hero: Rank Map Top-3% */}
+          <div className="hero-metric" style={{borderColor: rankMap ? '#EA9320' : '#333'}}>
+            {rankMap ? (
+              <>
+                <div className="hero-value" style={{color:'#EA9320'}}>{rankMap.top_3_pct}%</div>
+                <div className="hero-label">Top-3 Pack Visibility</div>
+                <div className="hero-sub">"{rankMap.keyword}" &bull; {rankMap.grid_size}pt grid &bull; {rankMap.scan_date}</div>
+                <div className="hero-sub">Avg rank: {rankMap.avg_rank?.toFixed(1) || '\u2014'} &bull; Grid center rank: {rankMap.center_rank || '\u2014'}</div>
+              </>
+            ) : (
+              <>
+                <div className="hero-value" style={{color:'#333'}}>\u2014</div>
+                <div className="hero-label">Rank Map Not Yet Imported</div>
+                <div className="hero-sub">Run import-rankmap.js with a Local Falcon CSV</div>
+              </>
+            )}
+          </div>
+
+          {/* Overall + 3 Score Cards */}
+          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'3px solid #a78bfa'}}>
+              <h3>Overall</h3>
+              <div className="value" style={{color:'#a78bfa'}}>{scores.overall ?? '\u2014'}</div>
+              <div className="delta" style={{color:deltaColor(delta.overall)}}>{getDeltaArrow(delta.overall)} {delta.overall != null ? (delta.overall>0?'+':'')+delta.overall+' pts':''}</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}>
+              <h3>SEO (L1)</h3>
+              <div className="value" style={{color:'#4ade80'}}>{seo}</div>
+              <div className="delta" style={{color:deltaColor(delta.seo)}}>{getDeltaArrow(delta.seo)} {delta.seo!=null?(delta.seo>0?'+':'')+delta.seo:''}</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #fbbf24'}}>
+              <h3>AI (L2)</h3>
+              <div className="value" style={{color:'#fbbf24'}}>{ai}</div>
+              <div className="delta" style={{color:deltaColor(delta.ai_discoverability)}}>{getDeltaArrow(delta.ai_discoverability)} {delta.ai_discoverability!=null?(delta.ai_discoverability>0?'+':'')+delta.ai_discoverability:''}</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #f97316'}}>
+              <h3>GEO (L3)</h3>
+              <div className="value" style={{color:'#f97316'}}>{geo}</div>
+              <div className="delta" style={{color:deltaColor(delta.geo_readiness)}}>{getDeltaArrow(delta.geo_readiness)} {delta.geo_readiness!=null?(delta.geo_readiness>0?'+':'')+delta.geo_readiness:''}</div>
+            </div>
+          </section>
+
+          {/* Core 30 Coverage Bar */}
+          {core30 && (
+            <section className="card" style={{marginBottom:'2rem'}}>
+              <h3 style={{marginTop:0}}>Core 30 Coverage</h3>
+              <div style={{display:'flex', gap:'2rem', flexWrap:'wrap'}}>
+                <div style={{flex:1, minWidth:'200px'}}>
+                  <div style={{fontSize:'0.85rem', color:'#888', marginBottom:'0.5rem'}}>Categories ({core30.categories_found || 0}/{core30.categories_total || 0})</div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{width: `${core30.categories_total ? Math.round((core30.categories_found||0)/(core30.categories_total)*100) : 0}%`, background:'#4ade80'}} />
+                  </div>
+                </div>
+                <div style={{flex:1, minWidth:'200px'}}>
+                  <div style={{fontSize:'0.85rem', color:'#888', marginBottom:'0.5rem'}}>Services ({core30.services_found || 0}/{core30.services_total || 0})</div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{width: `${core30.services_total ? Math.round((core30.services_found||0)/(core30.services_total)*100) : 0}%`, background:'#60a5fa'}} />
+                  </div>
+                </div>
+              </div>
+              {(core30.categories_missing > 0 || core30.services_missing > 0) && (
+                <div style={{marginTop:'0.75rem', fontSize:'0.85rem', color:'#f87171'}}>
+                  {core30.categories_missing > 0 && `${core30.categories_missing} category page${core30.categories_missing>1?'s':''} missing`}
+                  {core30.categories_missing > 0 && core30.services_missing > 0 && ' \u2022 '}
+                  {core30.services_missing > 0 && `${core30.services_missing} service page${core30.services_missing>1?'s':''} missing`}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Score Timeline */}
+          <section style={{marginBottom:'2rem'}}>
+            <h2>Score Timeline</h2>
+            <Recharts.ResponsiveContainer width="100%" height={280}>
+              <Recharts.LineChart data={chartData} margin={{top:5,right:20,left:10,bottom:5}}>
+                <Recharts.CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <Recharts.XAxis dataKey="date" stroke="#888" />
+                <Recharts.YAxis domain={[0,100]} stroke="#888" />
+                <Recharts.Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #333'}} />
+                <Recharts.Legend />
+                <Recharts.Line type="monotone" dataKey="Overall" stroke="#a78bfa" strokeWidth={2} dot={{r:3}} />
+                <Recharts.Line type="monotone" dataKey="SEO" stroke="#4ade80" strokeWidth={2} dot={{r:3}} />
+                <Recharts.Line type="monotone" dataKey="AI" stroke="#fbbf24" strokeWidth={2} dot={{r:3}} />
+                <Recharts.Line type="monotone" dataKey="GEO" stroke="#f97316" strokeWidth={2} dot={{r:3}} />
+              </Recharts.LineChart>
+            </Recharts.ResponsiveContainer>
+          </section>
+
+          {/* Quick Wins */}
+          {quickWins.length > 0 && (
+            <section className="card" style={{marginBottom:'2rem', border:'1px solid #333'}}>
+              <h2 style={{marginTop:0}}>Quick Wins ({quickWins.length})</h2>
+              <p style={{color:'#888', marginTop:0}}>High-impact fixes under 15 minutes</p>
+              {quickWins.map(f => (
+                <div key={f.id} style={{marginBottom:'1rem', paddingBottom:'1rem', borderBottom:'1px solid #222'}}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <strong style={{color:sevColor(f.severity)}}>[{f.severity.toUpperCase()}] {f.title}</strong>
+                    <span style={{color:'#888', fontSize:'0.85rem'}}>{f.effort_minutes} min</span>
+                  </div>
+                  <div style={{color:'#aaa', fontSize:'0.9rem', marginTop:'0.25rem'}}>{f.fix}</div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* GBP Health Card */}
+          <section className="card" style={{marginBottom:'2rem', border:'1px solid #333'}}>
+            <h3 style={{marginTop:0}}>GBP Health</h3>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px,1fr))', gap:'1rem'}}>
+              <div>
+                <div style={{color:'#888', fontSize:'0.8rem'}}>Reviews</div>
+                <div style={{fontSize:'1.5rem', fontWeight:700}}>{scores.seo?.breakdown?.gbp_reviews ?? '\u2014'}</div>
+              </div>
+              <div>
+                <div style={{color:'#888', fontSize:'0.8rem'}}>Rating</div>
+                <div style={{fontSize:'1.5rem', fontWeight:700}}>{scores.seo?.breakdown?.gbp_rating ?? '\u2014'}</div>
+              </div>
+              <div>
+                <div style={{color:'#888', fontSize:'0.8rem'}}>Map Embed</div>
+                <div style={{fontSize:'1.5rem', fontWeight:700, color: scores.seo?.breakdown?.gbp_embed ? '#4ade80' : '#f87171'}}>{scores.seo?.breakdown?.gbp_embed ? '\u2713' : '\u2717'}</div>
+              </div>
+              <div>
+                <div style={{color:'#888', fontSize:'0.8rem'}}>GBP Score</div>
+                <div style={{fontSize:'1.5rem', fontWeight:700}}>{scores.seo?.breakdown?.gbp ?? '\u2014'}/15</div>
+              </div>
+            </div>
+          </section>
+
+          {/* Run Audit / Refresh Data */}
+          <section className="card" style={{marginBottom:'2rem', border:'1px solid #333', textAlign:'center', padding:'2rem'}}>
+            <h3 style={{marginTop:0, color:'#888'}}>Refresh Audit Data</h3>
+            <button
+              disabled
+              style={{
+                padding:'0.75rem 2rem', background:'#333', color:'#666',
+                fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1rem',
+                border:'1px solid #444', borderRadius:'6px', cursor:'not-allowed'
+              }}
+            >
+              Run New Audit
+            </button>
+            <p style={{color:'#555', fontSize:'0.8rem', marginTop:'0.75rem', marginBottom:0}}>
+              Coming soon: weekly automated audits &bull; Last run: {lastAuditDate || '\u2014'}
+            </p>
+          </section>
+        </div>
+      );
+    }
+
+    /* ── Tab: Rank Map ───────────────────────────────────── */
+    function RankMapTab({ rankMaps }) {
+      if (!rankMaps || rankMaps.length === 0) {
+        return <div className="card" style={{textAlign:'center',padding:'3rem'}}><h3 style={{color:'#888'}}>No rank map data imported</h3><p style={{color:'#666'}}>Run import-rankmap.js with a Local Falcon or DataForSEO CSV.</p></div>;
+      }
+
+      const [selectedIdx, setSelectedIdx] = React.useState(0);
+      const rm = rankMaps[selectedIdx];
+      const grid = rm.grid_data || [];
+      const size = rm.grid_size || Math.round(Math.sqrt(grid.length)) || 5;
+
+      return (
+        <div>
+          {/* Selector for multiple scans */}
+          {rankMaps.length > 1 && (
+            <div style={{marginBottom:'1.5rem'}}>
+              <select className="filter" value={selectedIdx} onChange={e => setSelectedIdx(Number(e.target.value))}>
+                {rankMaps.map((r,i) => (
+                  <option key={r.id} value={i}>{r.keyword} — {r.scan_date} ({r.source})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Stats */}
+          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'3px solid #EA9320'}}>
+              <h3>Top-3 %</h3>
+              <div className="value" style={{color:'#EA9320'}}>{rm.top_3_pct}%</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #a78bfa'}}>
+              <h3>Avg Rank</h3>
+              <div className="value">{rm.avg_rank?.toFixed(1) || '\u2014'}</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #60a5fa'}}>
+              <h3>Center Rank</h3>
+              <div className="value">{rm.center_rank || '\u2014'}</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #888'}}>
+              <h3>Grid</h3>
+              <div className="value" style={{fontSize:'1.8rem'}}>{size}x{size}</div>
+              <div style={{color:'#888', fontSize:'0.8rem'}}>{rm.radius_km ? rm.radius_km+'km radius' : ''}</div>
+            </div>
+          </section>
+
+          {/* Grid visualization */}
+          <section className="card" style={{marginBottom:'2rem'}}>
+            <h3 style={{marginTop:0}}>Grid Map — "{rm.keyword}"</h3>
+            <div style={{display:'inline-grid', gridTemplateColumns:`repeat(${size}, 32px)`, gap:'3px', margin:'1rem 0'}}>
+              {grid.map((rank, i) => (
+                <div key={i} className="grid-cell" style={{background:rankBg(rank), color:rankColor(rank), borderColor: i === Math.floor(grid.length/2) ? '#EA9320' : '#333', borderWidth: i === Math.floor(grid.length/2) ? '2px' : '1px'}}>
+                  {rank && rank <= 20 ? rank : rank ? '20+' : '\u2014'}
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex', gap:'1rem', flexWrap:'wrap', fontSize:'0.75rem', color:'#888', marginTop:'0.5rem'}}>
+              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(74,222,128,0.3)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>1-3</span>
+              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(163,230,53,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>4-7</span>
+              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(251,191,36,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>8-10</span>
+              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(249,115,22,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>11-15</span>
+              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(248,113,113,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>16-20</span>
+            </div>
+          </section>
+
+          {/* Trend chart if multiple scans for same keyword */}
+          {rankMaps.filter(r => r.keyword === rm.keyword).length > 1 && (
+            <section style={{marginBottom:'2rem'}}>
+              <h3>Top-3% Trend — "{rm.keyword}"</h3>
+              <Recharts.ResponsiveContainer width="100%" height={220}>
+                <Recharts.LineChart data={rankMaps.filter(r => r.keyword === rm.keyword).reverse().map(r => ({date:r.scan_date, top3:r.top_3_pct, avgRank:r.avg_rank}))}>
+                  <Recharts.CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <Recharts.XAxis dataKey="date" stroke="#888" />
+                  <Recharts.YAxis stroke="#888" />
+                  <Recharts.Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #333'}} />
+                  <Recharts.Line type="monotone" dataKey="top3" name="Top-3 %" stroke="#EA9320" strokeWidth={2} dot={{r:4}} />
+                  <Recharts.Line type="monotone" dataKey="avgRank" name="Avg Rank" stroke="#a78bfa" strokeWidth={2} dot={{r:4}} />
+                </Recharts.LineChart>
+              </Recharts.ResponsiveContainer>
+            </section>
+          )}
+        </div>
+      );
+    }
+
+    /* ── Tab: Core 30 ────────────────────────────────────── */
+    function Core30Tab({ core30, contentBriefs }) {
+      if (!core30) {
+        return <p style={{color:'#888'}}>No Core 30 analysis data. Run a full audit first.</p>;
+      }
+
+      const catPct = core30.categories_total ? Math.round((core30.categories_found||0)/core30.categories_total*100) : 0;
+      const svcPct = core30.services_total ? Math.round((core30.services_found||0)/core30.services_total*100) : 0;
+
+      return (
+        <div>
+          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}>
+              <h3>Category Pages</h3>
+              <div className="value">{core30.categories_found || 0}<span style={{fontSize:'1rem', color:'#888'}}>/{core30.categories_total || 0}</span></div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>{catPct}% coverage</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #60a5fa'}}>
+              <h3>Service Pages</h3>
+              <div className="value">{core30.services_found || 0}<span style={{fontSize:'1rem', color:'#888'}}>/{core30.services_total || 0}</span></div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>{svcPct}% coverage</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #f87171'}}>
+              <h3>Missing</h3>
+              <div className="value" style={{color:'#f87171'}}>{(core30.categories_missing||0) + (core30.services_missing||0)}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>pages to create</div>
+            </div>
+            <div className="score-card" style={{borderTop:'3px solid #fbbf24'}}>
+              <h3>Content Briefs</h3>
+              <div className="value">{(contentBriefs||[]).length}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>ready to write</div>
+            </div>
+          </section>
+
+          {/* Content Briefs Table */}
+          {(contentBriefs||[]).length > 0 && (
+            <section>
+              <h3>Content Pipeline</h3>
+              <table>
+                <thead>
+                  <tr><th>Priority</th><th>Action</th><th>Keyword</th><th>Type</th><th>Target Words</th><th>Phase</th><th>Must Include</th></tr>
+                </thead>
+                <tbody>
+                  {contentBriefs.sort((a,b) => (a.priority||99)-(b.priority||99)).map((b,i) => (
+                    <tr key={i}>
+                      <td><span className="pill" style={{background: b.priority<=2?'rgba(239,68,68,0.2)':b.priority<=5?'rgba(251,191,36,0.2)':'rgba(96,165,250,0.2)', color:b.priority<=2?'#f87171':b.priority<=5?'#fbbf24':'#60a5fa'}}>P{b.priority}</span></td>
+                      <td style={{textTransform:'capitalize'}}>{b.action}</td>
+                      <td style={{fontWeight:500}}>{b.target_keyword}</td>
+                      <td>{b.page_type}</td>
+                      <td>{b.target_word_count}+</td>
+                      <td>{b.phase}</td>
+                      <td style={{fontSize:'0.8rem', color:'#aaa', maxWidth:'250px'}}>{(b.must_include||[]).join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {core30.notes && core30.notes.length > 0 && (
+            <section className="card" style={{marginTop:'1.5rem'}}>
+              <h4 style={{marginTop:0}}>Notes</h4>
+              <ul style={{color:'#aaa', margin:0, paddingLeft:'1.2rem'}}>
+                {core30.notes.map((n,i) => <li key={i}>{n}</li>)}
+              </ul>
+            </section>
+          )}
+        </div>
+      );
+    }
+
+    /* ── Tab: Findings ───────────────────────────────────── */
+    function FindingsTab({ latestFindings }) {
+      const [filterSev, setFilterSev] = React.useState('all');
+      const [filterStat, setFilterStat] = React.useState('all');
+      const [filterCat, setFilterCat] = React.useState('all');
+
+      const categories = [...new Set(latestFindings.map(f => f.category))].sort();
+
+      const filtered = latestFindings
+        .filter(f => filterSev === 'all' || f.severity === filterSev)
+        .filter(f => filterStat === 'all' || f.status === filterStat)
+        .filter(f => filterCat === 'all' || f.category === filterCat)
+        .sort((a,b) => {
+          const o = {critical:0,high:1,medium:2,low:3};
+          return (o[a.severity]||4)-(o[b.severity]||4);
+        });
+
+      return (
+        <div>
+          <div style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap'}}>
+            <select className="filter" value={filterSev} onChange={e=>setFilterSev(e.target.value)}>
+              <option value="all">All Severities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <select className="filter" value={filterStat} onChange={e=>setFilterStat(e.target.value)}>
+              <option value="all">All Statuses</option>
+              <option value="open">Open</option>
+              <option value="fixed">Fixed</option>
+              <option value="in_progress">In Progress</option>
+            </select>
+            <select className="filter" value={filterCat} onChange={e=>setFilterCat(e.target.value)}>
+              <option value="all">All Categories</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <span style={{color:'#888', alignSelf:'center', fontSize:'0.85rem'}}>{filtered.length} finding{filtered.length!==1?'s':''}</span>
+          </div>
+          <table>
+            <thead><tr><th>Sev</th><th>Title</th><th>Category</th><th>Layer</th><th>Page</th><th>Status</th><th>Effort</th><th>Age</th></tr></thead>
+            <tbody>
+            {filtered.map(f => {
+              const age = Math.floor((new Date() - new Date(f.still_open_since || f.first_detected || f.created_at)) / 86400000);
+              return (
+                <tr key={f.id} title={f.fix}>
+                  <td><span className="pill" style={{background:`${sevColor(f.severity)}22`, color:sevColor(f.severity)}}>{f.severity}</span></td>
+                  <td style={{fontWeight:500}}>{f.title}</td>
+                  <td style={{color:'#888'}}>{f.category}</td>
+                  <td style={{color:'#888'}}>{f.layer != null ? `L${f.layer}` : '\u2014'}</td>
+                  <td style={{fontFamily:'monospace', fontSize:'0.8rem'}}>{f.page || '\u2014'}</td>
+                  <td>{f.status}</td>
+                  <td>{f.effort_minutes ? f.effort_minutes+'m' : '\u2014'}</td>
+                  <td style={{color:'#888'}}>{age}d</td>
+                </tr>
+              );
+            })}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    /* ── Tab: GEO Signals ────────────────────────────────── */
+    function GeoTab({ latestGeo }) {
+      if (latestGeo.length === 0) return <p style={{color:'#888'}}>No GEO/AEO signals recorded. Run a full audit to populate.</p>;
+      const passing = latestGeo.filter(g => g.signal_value).length;
+      const pct = Math.round((passing/latestGeo.length)*100);
+
+      return (
+        <div>
+          <div style={{display:'flex', gap:'1.5rem', marginBottom:'2rem', alignItems:'center'}}>
+            <div className="score-card" style={{maxWidth:'200px', borderTop:'3px solid #f97316'}}>
+              <h3>GEO Score</h3>
+              <div className="value">{pct}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>{passing}/{latestGeo.length} passing</div>
+            </div>
+          </div>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:'0.75rem'}}>
+            {latestGeo.map(g => (
+              <div key={g.id} style={{background:'#1a1a1a', padding:'1rem', borderRadius:'8px', borderLeft: g.signal_value ? '3px solid #4ade80':'3px solid #f87171'}}>
+                <div style={{fontWeight:500, textTransform:'capitalize'}}>{g.signal_name.replace(/_/g,' ')}</div>
+                <div style={{color: g.signal_value?'#4ade80':'#f87171', fontSize:'0.85rem', margin:'0.25rem 0'}}>{g.signal_value ? '\u2713 Present':'\u2717 Missing'}</div>
+                {g.recommendation && <div style={{color:'#888', fontSize:'0.8rem', fontStyle:'italic'}}>{g.recommendation}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ── Tab: AI Mentions ────────────────────────────────── */
+    function AITab({ aiMentions }) {
+      if (aiMentions.length === 0) return <p style={{color:'#888'}}>AI probes not yet run. Layer 2 data will appear after n8n probes execute.</p>;
+      return (
+        <div>
+          <table>
+            <thead><tr><th>Engine</th><th>Query</th><th>Mentioned?</th><th>NAP Accurate</th><th>Sentiment</th></tr></thead>
+            <tbody>
+              {aiMentions.map(m => (
+                <tr key={m.id}>
+                  <td style={{textTransform:'capitalize'}}>{m.engine}</td>
+                  <td>{m.query}</td>
+                  <td style={{color: m.mentioned?'#4ade80':'#f87171'}}>{m.mentioned?'Yes':'No'}</td>
+                  <td style={{color: m.nap_accurate?'#4ade80':m.nap_accurate===false?'#f87171':'#888'}}>{m.nap_accurate==null?'\u2014':m.nap_accurate?'Yes':'No'}</td>
+                  <td>{m.sentiment||'\u2014'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    /* ── Tab: Link Checklist ─────────────────────────────── */
+    function LinkChecklistTab({ links }) {
+      if (!links || links.length === 0) return <p style={{color:'#888'}}>No link checklist generated. Run a full audit to populate.</p>;
+      const [filterType, setFilterType] = React.useState('all');
+      const types = [...new Set(links.map(l => l.link_type))].sort();
+      const filtered = links.filter(l => filterType === 'all' || l.link_type === filterType);
+      const done = links.filter(l => l.status === 'done').length;
+
+      return (
+        <div>
+          <div style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', alignItems:'center', flexWrap:'wrap'}}>
+            <div className="score-card" style={{maxWidth:'200px', borderTop:'3px solid #EA9320'}}>
+              <h3>Links Built</h3>
+              <div className="value">{done}<span style={{fontSize:'1rem', color:'#888'}}>/{links.length}</span></div>
+            </div>
+            <select className="filter" value={filterType} onChange={e => setFilterType(e.target.value)}>
+              <option value="all">All Types</option>
+              {types.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
+            </select>
+          </div>
+          <table>
+            <thead><tr><th>Priority</th><th>Type</th><th>Title</th><th>Target</th><th>Cost</th><th>Status</th></tr></thead>
+            <tbody>
+              {filtered.sort((a,b)=>(a.priority||99)-(b.priority||99)).map(l => (
+                <tr key={l.id} style={{opacity: l.status==='done'?0.5:1}}>
+                  <td><span className="pill" style={{background:l.priority<=2?'rgba(239,68,68,0.2)':l.priority<=5?'rgba(251,191,36,0.2)':'rgba(96,165,250,0.2)', color:l.priority<=2?'#f87171':l.priority<=5?'#fbbf24':'#60a5fa'}}>P{l.priority}</span></td>
+                  <td style={{textTransform:'capitalize'}}>{(l.link_type||'').replace(/_/g,' ')}</td>
+                  <td style={{fontWeight:500}}>{l.title}</td>
+                  <td style={{fontSize:'0.8rem', color:'#aaa'}}>{l.target_url || l.target_page || '\u2014'}</td>
+                  <td>{l.estimated_cost || 'Free'}</td>
+                  <td style={{textTransform:'capitalize'}}>{l.status || 'pending'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    /* ── Tab: Competitors ────────────────────────────────── */
+    function CompetitorsTab({ competitors, site }) {
+      if (!competitors || competitors.length === 0) return <p style={{color:'#888'}}>No competitor data. Run a full audit with competitor scanning enabled, or import via import-sf.js.</p>;
+
+      return (
+        <div>
+          <h3>Competitor Benchmark — {site.target_city || site.city}</h3>
+          <table>
+            <thead><tr><th>Competitor</th><th>Domain</th><th>Reviews</th><th>Rating</th><th>Indexed Pages</th><th>Categories</th><th>Last Checked</th></tr></thead>
+            <tbody>
+              {/* Client row first */}
+              <tr style={{background:'rgba(234,147,32,0.1)', fontWeight:500}}>
+                <td>{site.business_name} (you)</td>
+                <td>{site.domain}</td>
+                <td>{site.gbp_review_count || '\u2014'}</td>
+                <td>{site.gbp_review_rating || '\u2014'}</td>
+                <td>\u2014</td>
+                <td>{[site.gbp_primary_category, ...(site.gbp_secondary_categories||[])].filter(Boolean).length || '\u2014'}</td>
+                <td>\u2014</td>
+              </tr>
+              {competitors.map(c => (
+                <tr key={c.id}>
+                  <td style={{fontWeight:500}}>{c.competitor_name}</td>
+                  <td style={{color:'#aaa'}}>{c.domain || '\u2014'}</td>
+                  <td style={{color: (c.review_count||0) > (site.gbp_review_count||0) ? '#f87171' : '#4ade80'}}>{c.review_count || '\u2014'}</td>
+                  <td style={{color: (c.review_rating||0) > (site.gbp_review_rating||0) ? '#f87171' : '#4ade80'}}>{c.review_rating || '\u2014'}</td>
+                  <td>{c.indexed_pages || '\u2014'}</td>
+                  <td>{c.categories_count || '\u2014'}</td>
+                  <td style={{color:'#888', fontSize:'0.8rem'}}>{c.last_checked || '\u2014'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{fontSize:'0.8rem', color:'#666', marginTop:'1rem'}}>Red = competitor beats you. Green = you beat them.</p>
+        </div>
+      );
+    }
+
+    /* ── Tab: Directory Listings ──────────────────────────── */
+    function DirectoryTab({ listings, site }) {
+      const [filterStatus, setFilterStatus] = React.useState('all');
+      const [filterTier, setFilterTier] = React.useState('all');
+
+      if (listings.length === 0) return <div className="card" style={{textAlign:'center',padding:'3rem'}}><h3 style={{color:'#888'}}>No directory audit run yet</h3><p style={{color:'#666'}}>Run a directory listing audit to populate.</p></div>;
+
+      const filtered = listings.filter(l => filterStatus==='all'||l.status===filterStatus).filter(l => filterTier==='all'||l.tier===parseInt(filterTier));
+      const listed = listings.filter(l => l.status==='listed').length;
+      const needsAtt = listings.filter(l => l.status==='needs_fix'||l.status==='needs_claim').length;
+      const notListed = listings.filter(l => l.status==='not_listed').length;
+      const tierNames = {1:'Critical',2:'High Impact',3:'Industry',4:'Secondary',5:'Regional'};
+
+      return (
+        <div>
+          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}><h3>Listed</h3><div className="value" style={{color:'#4ade80'}}>{listed}</div></div>
+            <div className="score-card" style={{borderTop:'3px solid #fbbf24'}}><h3>Needs Fix</h3><div className="value" style={{color:'#fbbf24'}}>{needsAtt}</div></div>
+            <div className="score-card" style={{borderTop:'3px solid #f87171'}}><h3>Not Listed</h3><div className="value" style={{color:'#f87171'}}>{notListed}</div></div>
+          </section>
+          <div style={{display:'flex', gap:'0.75rem', marginBottom:'1rem'}}>
+            <select className="filter" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+              <option value="all">All Statuses</option>
+              <option value="listed">Listed</option>
+              <option value="needs_fix">Needs Fix</option>
+              <option value="needs_claim">Needs Claim</option>
+              <option value="not_listed">Not Listed</option>
+            </select>
+            <select className="filter" value={filterTier} onChange={e=>setFilterTier(e.target.value)}>
+              <option value="all">All Tiers</option>
+              {[1,2,3,4,5].map(t => <option key={t} value={t}>Tier {t}: {tierNames[t]}</option>)}
+            </select>
+          </div>
+          <table>
+            <thead><tr><th>Status</th><th>Platform</th><th>Tier</th><th>Claimed</th><th>Cost</th><th>Link</th></tr></thead>
+            <tbody>
+              {filtered.sort((a,b)=>a.tier-b.tier||a.platform.localeCompare(b.platform)).map(l => (
+                <tr key={l.id} style={{background:statusRowBg(l.status)}}>
+                  <td>{statusIcon(l.status)} {statusLabel(l.status)}</td>
+                  <td style={{fontWeight:500}}>{l.platform.replace(/_/g,' ')}</td>
+                  <td style={{color:'#888'}}>{tierNames[l.tier]||l.tier}</td>
+                  <td>{l.is_claimed==null?'\u2014':l.is_claimed?'\u2713':'\u2717'}</td>
+                  <td>{l.cost_tier||'FREE'}</td>
+                  <td>{l.listing_url?<a href={l.listing_url} target="_blank" rel="noopener">View</a>:'\u2014'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    /* ── Main App ────────────────────────────────────────── */
+    function App() {
+      const params = new URLSearchParams(window.location.search);
+      const locationId = params.get('locationId');
+
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState(null);
+      const [site, setSite] = React.useState(null);
+      const [audits, setAudits] = React.useState([]);
+      const [findings, setFindings] = React.useState([]);
+      const [geoSignals, setGeoSignals] = React.useState([]);
+      const [aiMentions, setAiMentions] = React.useState([]);
+      const [directoryListings, setDirectoryListings] = React.useState([]);
+      const [rankMaps, setRankMaps] = React.useState([]);
+      const [competitors, setCompetitors] = React.useState([]);
+      const [linkChecklist, setLinkChecklist] = React.useState([]);
+      const [activeTab, setActiveTab] = React.useState('overview');
+
+      React.useEffect(() => {
+        if (!locationId) { setLoading(false); return; }
+        let canceled = false;
+
+        (async () => {
+          try {
+            const { data: siteData, error: siteErr } = await db.from('sites').select('*').eq('ghl_location_id', locationId).single();
+            if (siteErr) throw siteErr;
+            if (canceled) return;
+            setSite(siteData);
+
+            // Fetch all tables in parallel — gracefully handle missing tables
+            const queries = [
+              db.from('audits').select('*').eq('site_id', siteData.id).order('audit_date', {ascending:true}),
+              db.from('findings').select('*').eq('site_id', siteData.id),
+              db.from('geo_signals').select('*').eq('site_id', siteData.id),
+              db.from('ai_mentions').select('*').eq('site_id', siteData.id),
+              db.from('rank_maps').select('*').eq('site_id', siteData.id).order('scan_date', {ascending:false}),
+              db.from('competitors').select('*').eq('site_id', siteData.id).order('review_count', {ascending:false}),
+              db.from('link_checklist').select('*').eq('site_id', siteData.id).order('priority', {ascending:true}),
+              db.from('directory_listings').select('*').eq('site_id', siteData.id),
+            ];
+
+            const results = await Promise.allSettled(queries);
+            if (canceled) return;
+
+            const safe = (r) => r.status === 'fulfilled' && !r.value.error ? r.value.data || [] : [];
+            setAudits(safe(results[0]));
+            setFindings(safe(results[1]));
+            setGeoSignals(safe(results[2]));
+            setAiMentions(safe(results[3]));
+            setRankMaps(safe(results[4]));
+            setCompetitors(safe(results[5]));
+            setLinkChecklist(safe(results[6]));
+            setDirectoryListings(safe(results[7]));
+          } catch (e) {
+            console.error('Dashboard load error:', e);
+            if (!canceled) setError(e);
+            return;
+          } finally {
+            if (!canceled) setLoading(false);
+          }
+        })();
+
+        return () => { canceled = true; };
+      }, [locationId]);
+
+      if (!locationId) return <div className="container"><h2>Missing location parameter</h2><p>Add ?locationId=YOUR_GHL_LOCATION_ID to the URL</p></div>;
+      if (loading) return <div className="container" style={{textAlign:'center',paddingTop:'4rem'}}><h2>Loading dashboard...</h2></div>;
+
+      /* ── Empty / No-Data State — friendly CTA ─────────── */
+      if (error || !site || audits.length === 0) {
+        return (
+          <div className="container" style={{textAlign:'center', paddingTop:'4rem', maxWidth:'600px'}}>
+            <div style={{fontSize:'4rem', marginBottom:'1rem'}}>&#x1F50D;</div>
+            <h1 style={{margin:'0 0 0.5rem 0'}}>SEO & GEO Audit Dashboard</h1>
+            <p style={{color:'#888', fontSize:'1.1rem', margin:'0 0 2rem 0'}}>
+              {site ? site.business_name : 'Your business'} doesn't have an audit report yet.
+            </p>
+            <a
+              href="https://tattoonow.com/contact"
+              target="_blank"
+              rel="noopener"
+              style={{
+                display:'inline-block', padding:'0.9rem 2.5rem', background:'#EA9320', color:'#000',
+                fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1.1rem',
+                textDecoration:'none', borderRadius:'6px', transition:'background 0.2s'
+              }}
+              onMouseOver={e => e.currentTarget.style.background='#d4830f'}
+              onMouseOut={e => e.currentTarget.style.background='#EA9320'}
+            >
+              Request Your Free Audit
+            </a>
+            <p style={{color:'#555', fontSize:'0.85rem', marginTop:'1.5rem'}}>
+              We'll analyze your site across SEO, AI discoverability, GEO signals, directory listings, and more.
+            </p>
+            <footer style={{marginTop:'3rem', padding:'1rem 0', borderTop:'1px solid #222', fontSize:'0.8rem', color:'#666'}}>
+              Powered by <a href="https://tattoonow.com" target="_blank">TattooNOW</a>
+            </footer>
+          </div>
+        );
+      }
+
+      const latest = audits[audits.length - 1];
+      const scores = latest.scores || {};
+      const delta = latest.delta || {};
+      const core30 = latest.core30_coverage || null;
+      const contentBriefs = latest.content_briefs || [];
+
+      const chartData = audits.map(a => ({
+        date: a.audit_date,
+        Overall: a.scores?.overall ?? 0,
+        SEO: a.scores?.seo?.score ?? 0,
+        AI: a.scores?.ai_discoverability?.score ?? 0,
+        GEO: a.scores?.geo_readiness?.score ?? 0,
+      }));
+
+      const latestFindings = findings.filter(f => f.audit_id === latest.id);
+      const latestGeo = geoSignals.filter(g => g.audit_id === latest.id);
+      const quickWins = latestFindings.filter(f => f.effort_minutes <= 15 && f.impact === 'high' && f.status === 'open');
+      const latestRankMap = rankMaps.length > 0 ? rankMaps[0] : null;
+
+      const openFindings = latestFindings.filter(f => f.status === 'open').length;
+      const dirNeedsAtt = directoryListings.filter(l => l.status !== 'listed').length;
+      const pendingLinks = linkChecklist.filter(l => l.status !== 'done').length;
+      const missingPages = (core30?.categories_missing||0) + (core30?.services_missing||0);
+
+      const tabs = [
+        { id:'overview', label:'Overview' },
+        { id:'rankmap', label:'Rank Map', badge: latestRankMap ? latestRankMap.top_3_pct+'%' : null },
+        { id:'core30', label:'Core 30', badge: missingPages > 0 ? missingPages : null },
+        { id:'findings', label:'Findings', badge: openFindings || null },
+        { id:'geo', label:'GEO' },
+        { id:'ai', label:'AI' },
+        { id:'links', label:'Link Checklist', badge: pendingLinks || null },
+        { id:'competitors', label:'Competitors' },
+        { id:'directories', label:'Directories', badge: dirNeedsAtt || null },
+      ];
+
+      return (
+        <div className="container">
+          <header style={{marginBottom:'1.5rem'}}>
+            <h1 style={{margin:'0 0 0.25rem 0'}}>{site.business_name}</h1>
+            <p style={{margin:0, color:'#888'}}>{site.domain} &bull; {site.target_city||site.city}, {site.target_state||site.state} &bull; Last audit: {latest.audit_date}</p>
+          </header>
+
+          <nav className="tab-bar">
+            {tabs.map(t => (
+              <button key={t.id} className={`tab-btn ${activeTab===t.id?'active':''}`} onClick={()=>setActiveTab(t.id)}>
+                {t.label}
+                {t.badge != null && <span className="badge">{t.badge}</span>}
+              </button>
+            ))}
+          </nav>
+
+          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} lastAuditDate={latest.audit_date} />}
+          {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} />}
+          {activeTab === 'core30' && <Core30Tab core30={core30} contentBriefs={contentBriefs} />}
+          {activeTab === 'findings' && <FindingsTab latestFindings={latestFindings} />}
+          {activeTab === 'geo' && <GeoTab latestGeo={latestGeo} />}
+          {activeTab === 'ai' && <AITab aiMentions={aiMentions} />}
+          {activeTab === 'links' && <LinkChecklistTab links={linkChecklist} />}
+          {activeTab === 'competitors' && <CompetitorsTab competitors={competitors} site={site} />}
+          {activeTab === 'directories' && <DirectoryTab listings={directoryListings} site={site} />}
+
+          <footer style={{marginTop:'2rem', padding:'1rem 0', borderTop:'1px solid #222', fontSize:'0.8rem', color:'#666'}}>
+            Powered by <a href="https://tattoonow.com" target="_blank">TattooNOW</a> &bull; Site Audit System v3.0
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

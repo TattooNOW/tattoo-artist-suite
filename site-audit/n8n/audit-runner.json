@@ -1,0 +1,118 @@
+{
+  "name": "TattooNOW Audit Runner",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 3 * * 1" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Weekly Monday 3am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "run-audit",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 500]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": { "value": "public" },
+        "table": { "value": "sites" },
+        "returnAll": true
+      },
+      "id": "fetch-sites",
+      "name": "Fetch All Sites",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "REPLACE_ME", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// For webhook: use body.domain or body.locationId to filter\n// For schedule: process all sites\nconst items = $input.all();\nconst trigger = $('Webhook Trigger').isExecuted;\n\nif (trigger) {\n  const body = $('Webhook Trigger').first().json.body || {};\n  if (body.domain) {\n    return items.filter(i => i.json.domain === body.domain);\n  }\n  if (body.locationId) {\n    return items.filter(i => i.json.ghl_location_id === body.locationId);\n  }\n}\n\n// Schedule: return all sites\nreturn items;"
+      },
+      "id": "filter-sites",
+      "name": "Filter Sites",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd /path/to/site-audit/scripts && node run-audit.js --domain {{ $json.domain }}",
+        "timeout": 300
+      },
+      "id": "run-audit",
+      "name": "Run Audit Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [940, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            { "leftValue": "={{ $json.exitCode }}", "rightValue": 0, "operator": { "type": "number", "operation": "equals" } }
+          ]
+        }
+      },
+      "id": "check-result",
+      "name": "Audit Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse audit output for summary line\nconst stdout = $json.stdout || '';\nconst lines = stdout.split('\\n');\nconst summaryStart = lines.findIndex(l => l.includes('AUDIT COMPLETE'));\nconst summary = summaryStart >= 0 ? lines.slice(summaryStart).join('\\n') : 'Audit completed (no summary found)';\n\nreturn [{ json: { domain: $json.domain || 'unknown', status: 'success', summary } }];"
+      },
+      "id": "parse-success",
+      "name": "Parse Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { domain: $json.domain || 'unknown', status: 'failed', error: $json.stderr || 'Unknown error' } }];"
+      },
+      "id": "parse-failure",
+      "name": "Parse Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 400]
+    }
+  ],
+  "connections": {
+    "Weekly Monday 3am": { "main": [[{ "node": "Fetch All Sites", "type": "main", "index": 0 }]] },
+    "Webhook Trigger": { "main": [[{ "node": "Fetch All Sites", "type": "main", "index": 0 }]] },
+    "Fetch All Sites": { "main": [[{ "node": "Filter Sites", "type": "main", "index": 0 }]] },
+    "Filter Sites": { "main": [[{ "node": "Run Audit Script", "type": "main", "index": 0 }]] },
+    "Run Audit Script": { "main": [[{ "node": "Audit Succeeded?", "type": "main", "index": 0 }]] },
+    "Audit Succeeded?": {
+      "main": [
+        [{ "node": "Parse Success", "type": "main", "index": 0 }],
+        [{ "node": "Parse Failure", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "tattoonow-audit-v3" },
+  "tags": [{ "name": "site-audit" }]
+}

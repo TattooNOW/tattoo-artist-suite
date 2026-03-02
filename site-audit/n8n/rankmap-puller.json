@@ -1,0 +1,150 @@
+{
+  "name": "TattooNOW Rank Map Puller",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 2 1,15 * *" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Bi-Monthly 2am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.id as site_id, s.domain, s.business_name, s.target_city, s.target_state, s.primary_keyword FROM sites s WHERE s.target_city IS NOT NULL",
+        "options": {}
+      },
+      "id": "fetch-sites",
+      "name": "Fetch Sites with Target City",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "REPLACE_ME", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate rank map requests for each site\nconst sites = $input.all();\nconst requests = [];\n\nfor (const site of sites) {\n  const s = site.json;\n  const keywords = [\n    s.primary_keyword || 'tattoo shop',\n    `tattoo artist ${s.target_city}`,\n    `tattoo shop ${s.target_city} ${s.target_state}`\n  ];\n\n  for (const keyword of keywords) {\n    requests.push({\n      json: {\n        site_id: s.site_id,\n        domain: s.domain,\n        business_name: s.business_name,\n        keyword,\n        city: s.target_city,\n        state: s.target_state\n      }\n    });\n  }\n}\n\nreturn requests;"
+      },
+      "id": "generate-requests",
+      "name": "Generate Keyword Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": { "reset": false }
+      },
+      "id": "rate-limiter",
+      "name": "Rate Limiter",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.localfalcon.com/v2/scan",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"keyword\": \"{{ $json.keyword }}\",\n  \"business_name\": \"{{ $json.business_name }}\",\n  \"location\": \"{{ $json.city }}, {{ $json.state }}\",\n  \"grid_size\": 7,\n  \"radius\": 8\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "call-local-falcon",
+      "name": "Call Local Falcon API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 300],
+      "continueOnFail": true,
+      "notes": "Replace with actual Local Falcon API endpoint and auth. If using DataForSEO or LeadSnap, adjust URL and body format."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Local Falcon API response into rank_maps format\nconst req = $('Rate Limiter').first().json;\nconst resp = $json;\n\n// Handle API error\nif (resp.error || !resp.grid) {\n  return [{ json: { error: true, message: resp.error || 'No grid data', keyword: req.keyword } }];\n}\n\nconst grid = resp.grid || [];\nconst flatGrid = Array.isArray(grid[0]) ? grid.flat() : grid;\nconst size = Math.round(Math.sqrt(flatGrid.length));\n\n// Calculate metrics\nconst validRanks = flatGrid.filter(r => r !== null && r <= 20);\nconst top3Count = flatGrid.filter(r => r !== null && r <= 3).length;\nconst top3Pct = flatGrid.length > 0 ? Math.round((top3Count / flatGrid.length) * 100) : 0;\nconst avgRank = validRanks.length > 0 ? Math.round((validRanks.reduce((a, b) => a + b, 0) / validRanks.length) * 10) / 10 : null;\nconst centerIdx = Math.floor(flatGrid.length / 2);\nconst centerRank = flatGrid[centerIdx] || null;\n\nreturn [{\n  json: {\n    site_id: req.site_id,\n    keyword: req.keyword,\n    scan_date: new Date().toISOString().slice(0, 10),\n    source: 'local_falcon',\n    grid_size: size,\n    radius_km: resp.radius || 8,\n    grid_data: flatGrid,\n    top_3_pct: top3Pct,\n    avg_rank: avgRank,\n    center_rank: centerRank\n  }\n}];"
+      },
+      "id": "parse-response",
+      "name": "Parse Grid Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            { "leftValue": "={{ $json.error }}", "rightValue": true, "operator": { "type": "boolean", "operation": "notEquals" } }
+          ]
+        }
+      },
+      "id": "check-success",
+      "name": "API Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": { "value": "public" },
+        "table": { "value": "rank_maps" },
+        "columns": { "mappingMode": "autoMapInputData" },
+        "conflictColumns": ["site_id", "keyword", "scan_date"]
+      },
+      "id": "save-rankmap",
+      "name": "Upsert rank_maps",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1900, 200],
+      "credentials": { "postgres": { "id": "REPLACE_ME", "name": "Supabase Postgres" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log error for debugging\nconsole.log('Rank map API error:', $json.message, 'for keyword:', $json.keyword);\nreturn [$input.first()];"
+      },
+      "id": "log-error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 400]
+    },
+    {
+      "parameters": {},
+      "id": "wait-node",
+      "name": "Wait 10s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2140, 300],
+      "parameters_extra": { "amount": 10, "unit": "seconds" },
+      "notes": "Rate limit: Local Falcon allows ~6 scans/min on basic plan"
+    }
+  ],
+  "connections": {
+    "Bi-Monthly 2am": { "main": [[{ "node": "Fetch Sites with Target City", "type": "main", "index": 0 }]] },
+    "Fetch Sites with Target City": { "main": [[{ "node": "Generate Keyword Requests", "type": "main", "index": 0 }]] },
+    "Generate Keyword Requests": { "main": [[{ "node": "Rate Limiter", "type": "main", "index": 0 }]] },
+    "Rate Limiter": { "main": [[{ "node": "Call Local Falcon API", "type": "main", "index": 0 }]] },
+    "Call Local Falcon API": { "main": [[{ "node": "Parse Grid Response", "type": "main", "index": 0 }]] },
+    "Parse Grid Response": { "main": [[{ "node": "API Succeeded?", "type": "main", "index": 0 }]] },
+    "API Succeeded?": {
+      "main": [
+        [{ "node": "Upsert rank_maps", "type": "main", "index": 0 }],
+        [{ "node": "Log Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upsert rank_maps": { "main": [[{ "node": "Wait 10s", "type": "main", "index": 0 }]] },
+    "Log Error": { "main": [[{ "node": "Wait 10s", "type": "main", "index": 0 }]] },
+    "Wait 10s": { "main": [[{ "node": "Rate Limiter", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "tattoonow-audit-v3" },
+  "tags": [{ "name": "site-audit" }, { "name": "rank-map" }]
+}

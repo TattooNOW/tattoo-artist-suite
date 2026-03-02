@@ -1,0 +1,28 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"npm install": true,
+			"/^node - <<'EOF'\nconst fs=require\\('fs'\\);\nconst src=\"/Users/tattoonow/Downloads/files \\(1\\)/site-audit-setup\\.sql\";\nconst dest=\"/Users/tattoonow/Documents/Claude Code/tattoo-artist-suite/site-audit/supabase/setup\\.sql\";\ntry \\{\n  fs\\.copyFileSync\\(src,dest\\);\n  console\\.log\\('copied', fs\\.statSync\\(dest\\)\\.size, 'bytes'\\);\n\\} catch\\(e\\)\\{\n  console\\.error\\('error', e\\.message\\);\n\\}\nEOF$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^node - <<'EOF'\nconst scoring=require\\('\\./site-audit/scripts/lib/scoring'\\);\nconst delta=require\\('\\./site-audit/scripts/lib/delta'\\);\nconsole\\.log\\('SEO score', scoring\\.calculateSEOScore\\(\\{titleLength:50,descriptionLength:100\\}\\)\\);\nconsole\\.log\\('AI score', scoring\\.calculateAIScore\\(\\[\\{engine:'claude',mentioned:true,nap_accurate:true,sentiment:'positive'\\},\\{engine:'claude',mentioned:false,nap_accurate:false,sentiment:'neutral'\\}\\]\\)\\);\nconsole\\.log\\('GEO score', scoring\\.calculateGEOScore\\(\\[\\{signal:'a',passed:true\\},\\{signal:'b',passed:false\\}\\]\\)\\);\nconsole\\.log\\('overall', scoring\\.calculateOverall\\(50,60,70\\)\\);\nconsole\\.log\\('delta', delta\\.calculateDelta\\(\\{overall:50,seo:40,ai:10,geo:20\\},\\{overall:30,seo:30,ai:5,geo:10\\}\\)\\);\nEOF$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^cd ~/\\.claude/skills/playwright-skill && node -e \"require\\('\\./lib/helpers'\\)\\.detectDevServers\\(\\)\\.then\\(s => console\\.log\\(JSON\\.stringify\\(s\\)\\)\\)\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^supabase inspect db --help 2>&1 \\| head -20$/": {
+				"approve": true,
+				"matchCommandLine": true
+			}
+		}
+	}
+}

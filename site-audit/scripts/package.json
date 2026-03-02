@@ -1,0 +1,22 @@
+{
+  "name": "tattoonow-site-audit-scripts",
+  "version": "3.0.0",
+  "description": "TattooNOW Site Audit — v3 diagnostic pipeline",
+  "main": "run-audit.js",
+  "scripts": {
+    "seed": "node seed-darkside.js",
+    "audit": "node run-audit.js",
+    "audit:quick": "node run-audit.js --skip-crawl --skip-gbp --skip-competitors",
+    "import:rankmap": "node import-rankmap.js",
+    "import:spyfu": "node import-sf.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "cheerio": "^1.0.0-rc.12",
+    "csv-parse": "^5.5.0",
+    "jsonschema": "^1.4.1",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.19.0",
+    "yargs": "^17.0.1"
+  }
+}
