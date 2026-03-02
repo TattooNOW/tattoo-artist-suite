@@ -84,53 +84,42 @@
     padding: 2rem 1.25rem;
   }
 
-  /* ── Progress Bar ──────────────────────────────────── */
-  .tnow-onboarding .progress-bar {
-    display: flex;
-    align-items: center;
-    gap: 0;
+  /* ── Tab Bar ──────────────────────────────────────── */
+  .tnow-onboarding .tab-bar {
+    display: none;
+    border-bottom: 2px solid var(--tnow-border);
     margin-bottom: 2rem;
   }
-  .tnow-onboarding .progress-step {
+  .tnow-onboarding .tab-bar.visible {
     display: flex;
-    align-items: center;
-    flex: 1;
   }
-  .tnow-onboarding .progress-dot {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: 2px solid var(--tnow-border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 700;
+  .tnow-onboarding .tab-item {
+    flex: 1;
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    font-family: var(--tnow-font-display);
+    font-size: 0.8rem;
+    font-weight: 600;
     color: var(--tnow-muted);
-    background: var(--tnow-card);
-    flex-shrink: 0;
-    transition: all 0.3s ease;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.25s ease;
+    user-select: none;
   }
-  .tnow-onboarding .progress-dot.active {
-    border-color: var(--tnow-primary);
-    color: var(--tnow-primary-fg);
-    background: var(--tnow-primary);
-    box-shadow: 0 0 12px hsl(197, 80%, 35% / 0.5);
+  .tnow-onboarding .tab-item:hover {
+    color: var(--tnow-fg);
   }
-  .tnow-onboarding .progress-dot.completed {
-    border-color: var(--tnow-success);
-    background: var(--tnow-success);
-    color: white;
+  .tnow-onboarding .tab-item.active {
+    color: var(--tnow-primary);
+    border-bottom-color: var(--tnow-primary);
   }
-  .tnow-onboarding .progress-line {
-    flex: 1;
-    height: 2px;
-    background: var(--tnow-border);
-    margin: 0 4px;
-    transition: background 0.3s ease;
+  .tnow-onboarding .tab-item.completed {
+    color: var(--tnow-success);
   }
-  .tnow-onboarding .progress-line.completed {
-    background: var(--tnow-success);
+  .tnow-onboarding .tab-item.completed::before {
+    content: '\2713 ';
+    font-size: 0.7rem;
   }
 
   /* ── Screen (each onboarding step) ─────────────────── */
@@ -218,16 +207,59 @@
     display: flex;
   }
   .tnow-onboarding .benefit-card .drag-handle {
-    position: absolute;
-    top: 12px;
-    left: 12px;
     color: var(--tnow-muted);
-    font-size: 1rem;
-    display: none;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
     cursor: grab;
+    flex-shrink: 0;
+    padding: 0.25rem;
+    line-height: 1;
   }
-  .tnow-onboarding .benefit-card.selected .drag-handle {
-    display: block;
+  .tnow-onboarding .benefit-card .drag-handle:active {
+    cursor: grabbing;
+  }
+  .tnow-onboarding .benefit-card-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .tnow-onboarding .benefit-card-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .tnow-onboarding .benefit-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+  .tnow-onboarding .benefit-action-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--tnow-border);
+    background: transparent;
+    color: var(--tnow-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+  }
+  .tnow-onboarding .benefit-action-btn:hover {
+    border-color: var(--tnow-accent);
+    color: var(--tnow-accent);
+    background: hsl(195, 46%, 45% / 0.1);
+  }
+  .tnow-onboarding .benefit-action-btn.starred {
+    color: hsl(45, 100%, 55%);
+    border-color: hsl(45, 100%, 55% / 0.4);
+  }
+  .tnow-onboarding .benefit-action-btn.archived {
+    color: var(--tnow-destructive);
+    border-color: hsl(0, 72%, 51% / 0.4);
   }
   .tnow-onboarding .benefit-header {
     display: flex;
@@ -242,6 +274,31 @@
   .tnow-onboarding .benefit-title {
     font-family: var(--tnow-font-display);
     font-size: 0.85rem;
+  }
+  .tnow-onboarding .benefit-priority-label {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 99px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+  .tnow-onboarding .benefit-priority-label.priority-high {
+    background: hsl(0, 72%, 51% / 0.15);
+    color: hsl(0, 80%, 65%);
+    border: 1px solid hsl(0, 72%, 51% / 0.3);
+  }
+  .tnow-onboarding .benefit-priority-label.priority-medium {
+    background: hsl(45, 100%, 50% / 0.12);
+    color: hsl(45, 100%, 60%);
+    border: 1px solid hsl(45, 100%, 50% / 0.3);
+  }
+  .tnow-onboarding .benefit-priority-label.priority-low {
+    background: hsl(142, 72%, 40% / 0.12);
+    color: hsl(142, 72%, 55%);
+    border: 1px solid hsl(142, 72%, 40% / 0.3);
   }
   .tnow-onboarding .benefit-desc {
     font-size: 0.78rem;
@@ -582,35 +639,48 @@
       <span id="locationLabel">Location</span>
     </div>
 
-    <!-- Progress Bar -->
-    <div class="progress-bar" id="progressBar"></div>
+    <!-- Tab Bar (hidden on welcome screen) -->
+    <div class="tab-bar" id="tabBar">
+      <div class="tab-item" data-screen="1" onclick="tnowGoToScreen(1)">Priorities</div>
+      <div class="tab-item" data-screen="2" onclick="tnowGoToScreen(2)">Tasks</div>
+      <div class="tab-item" data-screen="3" onclick="tnowGoToScreen(3)">Review</div>
+    </div>
 
     <!-- ═══════════════════════════════════════════════════ -->
     <!-- SCREEN 1: Welcome                                   -->
     <!-- ═══════════════════════════════════════════════════ -->
     <div class="screen active" id="screen-welcome">
       <h1 class="screen-title">Welcome to <span class="text-gradient">TattooNOW</span></h1>
-      <p class="screen-subtitle">
+      <p class="screen-subtitle" id="welcomeGreeting">
         Let's get your business set up. We'll personalize your onboarding based on
         what matters most to you — so you can focus on your art while we handle the rest.
       </p>
 
-      <div class="form-group">
-        <label class="form-label" for="contactName">Your Name</label>
-        <input class="form-input" id="contactName" type="text" placeholder="e.g. Gabe Ripley" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="businessName">Business / Studio Name</label>
-        <input class="form-input" id="businessName" type="text" placeholder="e.g. Iron Rose Tattoo" />
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="contactEmail">Email</label>
-          <input class="form-input" id="contactEmail" type="email" placeholder="gabe@studio.com" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="contactPhone">Phone</label>
-          <input class="form-input" id="contactPhone" type="tel" placeholder="(555) 123-4567" />
+      <!-- Hidden inputs — auto-populated from HighLevel URL params -->
+      <input type="hidden" id="contactName" />
+      <input type="hidden" id="businessName" />
+      <input type="hidden" id="contactEmail" />
+      <input type="hidden" id="contactPhone" />
+
+      <!-- Info card showing who we know them as -->
+      <div class="summary-card" id="welcomeInfoCard" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div>
+            <div class="summary-label">Name</div>
+            <div class="summary-value" id="welcomeName">—</div>
+          </div>
+          <div>
+            <div class="summary-label">Studio</div>
+            <div class="summary-value" id="welcomeBusiness">—</div>
+          </div>
+          <div>
+            <div class="summary-label">Email</div>
+            <div class="summary-value" id="welcomeEmail">—</div>
+          </div>
+          <div>
+            <div class="summary-label">Website</div>
+            <div class="summary-value"><a id="welcomeWebsite" href="#" target="_blank" style="color:var(--tnow-accent);text-decoration:none;">—</a></div>
+          </div>
         </div>
       </div>
 
@@ -739,6 +809,10 @@
     screens: ['screen-welcome', 'screen-priorities', 'screen-tasks', 'screen-complete'],
   };
 
+  // ── Google Sheets Persistence (same Apps Script as launchpad) ──
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNjZ1kzDqvqCyi45CKgSljCVE5jGbW1Za1iInIXDo6uJvB5b9n7OP6sjV-O1Nu7MjL/exec';
+  var APPS_SCRIPT_SECRET = 'tattoonow_onboarding_2024';
+
   // ── URL Parameters ──────────────────────────────────────────
   var params = new URLSearchParams(window.location.search);
   var LOCATION_ID  = params.get('locationId') || params.get('location_id') || '';
@@ -746,12 +820,45 @@
   var WEBHOOK_OVERRIDE = params.get('webhookUrl') || params.get('webhook_url') || '';
   if (WEBHOOK_OVERRIDE) CONFIG.webhookUrl = WEBHOOK_OVERRIDE;
 
+  // HighLevel custom values passed as URL params
+  var CONTACT_NAME  = params.get('contact_name') || params.get('contactName') || '';
+  var CONTACT_EMAIL = params.get('contact_email') || params.get('contactEmail') || '';
+  var CONTACT_PHONE = params.get('contact_phone') || params.get('contactPhone') || '';
+  var LOCATION_NAME = params.get('location_name') || params.get('locationName') || params.get('businessName') || '';
+  var LOCATION_WEBSITE = params.get('location_website') || params.get('locationWebsite') || params.get('website') || '';
+
+  // Auto-populate hidden fields
+  if (CONTACT_NAME)  document.getElementById('contactName').value = CONTACT_NAME;
+  if (LOCATION_NAME) document.getElementById('businessName').value = LOCATION_NAME;
+  if (CONTACT_EMAIL) document.getElementById('contactEmail').value = CONTACT_EMAIL;
+  if (CONTACT_PHONE) document.getElementById('contactPhone').value = CONTACT_PHONE;
+
+  // Show welcome info card if we have contact data
+  if (CONTACT_NAME || LOCATION_NAME) {
+    var infoCard = document.getElementById('welcomeInfoCard');
+    if (infoCard) infoCard.style.display = 'block';
+    if (CONTACT_NAME) document.getElementById('welcomeName').textContent = CONTACT_NAME;
+    if (LOCATION_NAME) document.getElementById('welcomeBusiness').textContent = LOCATION_NAME;
+    if (CONTACT_EMAIL) document.getElementById('welcomeEmail').textContent = CONTACT_EMAIL;
+    if (LOCATION_WEBSITE) {
+      var wsEl = document.getElementById('welcomeWebsite');
+      var url = LOCATION_WEBSITE.indexOf('http') === 0 ? LOCATION_WEBSITE : 'https://' + LOCATION_WEBSITE;
+      wsEl.href = url;
+      wsEl.textContent = LOCATION_WEBSITE;
+    }
+    // Personalize greeting
+    var firstName = CONTACT_NAME.split(' ')[0];
+    document.getElementById('welcomeGreeting').innerHTML =
+      'Hey <strong>' + firstName + '</strong>! Let\'s personalize your onboarding based on ' +
+      'what matters most to you — so you can focus on your art while we handle the rest.';
+  }
+
   // Show location badge if we have an ID
   if (LOCATION_ID) {
     var badge = document.getElementById('locationBadge');
     if (badge) {
       badge.style.display = 'inline-flex';
-      document.getElementById('locationLabel').textContent = 'Location: ' + LOCATION_ID;
+      document.getElementById('locationLabel').textContent = 'Location: ' + (LOCATION_NAME || LOCATION_ID);
     }
   }
 
@@ -857,60 +964,100 @@
 
   var STORAGE_KEY = 'tattoonow_onboarding_' + (LOCATION_ID || 'default');
 
-  function loadState() {
-    try {
-      var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (saved) {
-        if (saved.selectedBenefits) selectedBenefits = saved.selectedBenefits;
-        if (saved.completedTasks) completedTasks = saved.completedTasks;
-        if (saved.contactName) document.getElementById('contactName').value = saved.contactName;
-        if (saved.businessName) document.getElementById('businessName').value = saved.businessName;
-        if (saved.contactEmail) document.getElementById('contactEmail').value = saved.contactEmail;
-        if (saved.contactPhone) document.getElementById('contactPhone').value = saved.contactPhone;
-        if (saved.currentScreen !== undefined) currentScreen = saved.currentScreen;
-      }
-    } catch (e) { /* ignore */ }
+  function applyStateData(data) {
+    if (!data) return;
+    if (data.selectedBenefits) selectedBenefits = data.selectedBenefits;
+    if (data.completedTasks) completedTasks = data.completedTasks;
+    if (data.starredBenefits) starredBenefits = data.starredBenefits;
+    if (data.archivedBenefits) archivedBenefits = data.archivedBenefits;
+    if (data.contactName) document.getElementById('contactName').value = data.contactName;
+    if (data.businessName) document.getElementById('businessName').value = data.businessName;
+    if (data.contactEmail) document.getElementById('contactEmail').value = data.contactEmail;
+    if (data.contactPhone) document.getElementById('contactPhone').value = data.contactPhone;
+    if (data.currentScreen !== undefined) currentScreen = data.currentScreen;
   }
 
+  function getStateData() {
+    return {
+      selectedBenefits: selectedBenefits,
+      completedTasks: completedTasks,
+      starredBenefits: starredBenefits,
+      archivedBenefits: archivedBenefits,
+      contactName: document.getElementById('contactName').value,
+      businessName: document.getElementById('businessName').value,
+      contactEmail: document.getElementById('contactEmail').value,
+      contactPhone: document.getElementById('contactPhone').value,
+      currentScreen: currentScreen,
+      lastUpdated: new Date().toISOString(),
+      locationId: LOCATION_ID,
+    };
+  }
+
+  // Load: try Google Sheets first, fall back to localStorage
+  async function loadState() {
+    var data = null;
+
+    if (APPS_SCRIPT_URL && LOCATION_ID) {
+      try {
+        var resp = await fetch(APPS_SCRIPT_URL + '?action=load&locationId=' + encodeURIComponent(LOCATION_ID) + '&page=priorities&secretKey=' + APPS_SCRIPT_SECRET);
+        var result = await resp.json();
+        if (result.success && result.data) data = result.data;
+      } catch (e) {
+        console.log('[TattooNOW Priorities] Sheets fetch failed, using localStorage');
+      }
+    }
+
+    if (!data) {
+      try {
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) data = JSON.parse(saved);
+      } catch (e) { /* ignore */ }
+    }
+
+    applyStateData(data);
+  }
+
+  // Save: write to localStorage + fire-and-forget to Google Sheets
   function saveState() {
+    var data = getStateData();
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        selectedBenefits: selectedBenefits,
-        completedTasks: completedTasks,
-        contactName: document.getElementById('contactName').value,
-        businessName: document.getElementById('businessName').value,
-        contactEmail: document.getElementById('contactEmail').value,
-        contactPhone: document.getElementById('contactPhone').value,
-        currentScreen: currentScreen,
-      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) { /* ignore */ }
+
+    if (APPS_SCRIPT_URL && LOCATION_ID) {
+      try {
+        var sheetParams = new URLSearchParams({
+          action: 'save',
+          page: 'priorities',
+          locationId: LOCATION_ID,
+          selectedBenefits: JSON.stringify(data.selectedBenefits),
+          completedTasks: JSON.stringify(data.completedTasks),
+          starredBenefits: JSON.stringify(data.starredBenefits),
+          archivedBenefits: JSON.stringify(data.archivedBenefits),
+          currentScreen: data.currentScreen.toString(),
+          contactName: data.contactName,
+          businessName: data.businessName,
+          contactEmail: data.contactEmail,
+          contactPhone: data.contactPhone,
+          secretKey: APPS_SCRIPT_SECRET,
+        });
+        fetch(APPS_SCRIPT_URL + '?' + sheetParams.toString()).catch(function() {});
+      } catch (e) { /* ignore */ }
+    }
   }
 
-  // ── Render: Progress Bar ────────────────────────────────────
-  function renderProgressBar() {
-    var bar = document.getElementById('progressBar');
-    var labels = ['Welcome', 'Priorities', 'Tasks', 'Complete'];
-    bar.innerHTML = '';
-    labels.forEach(function(label, i) {
-      var isCompleted = i < currentScreen;
-      var isActive = i === currentScreen;
+  // ── Render: Tab Bar ─────────────────────────────────────────
+  function renderTabBar() {
+    var bar = document.getElementById('tabBar');
+    // Show tabs only after the welcome screen
+    bar.classList.toggle('visible', currentScreen > 0);
 
-      var step = document.createElement('div');
-      step.className = 'progress-step';
-
-      var dot = document.createElement('div');
-      dot.className = 'progress-dot' + (isActive ? ' active' : '') + (isCompleted ? ' completed' : '');
-      dot.textContent = isCompleted ? '\u2713' : (i + 1);
-      dot.title = label;
-      step.appendChild(dot);
-
-      if (i < labels.length - 1) {
-        var line = document.createElement('div');
-        line.className = 'progress-line' + (isCompleted ? ' completed' : '');
-        step.appendChild(line);
-      }
-
-      bar.appendChild(step);
+    var tabs = bar.querySelectorAll('.tab-item');
+    tabs.forEach(function(tab) {
+      var screenIdx = parseInt(tab.getAttribute('data-screen'), 10);
+      tab.classList.toggle('active', screenIdx === currentScreen);
+      tab.classList.toggle('completed', screenIdx < currentScreen);
     });
   }
 
@@ -938,20 +1085,40 @@
 
   // ── Drag & Drop State ────────────────────────────────────────
   var dragSourceId = null;
+  var starredBenefits = {};
+  var archivedBenefits = {};
+
+  // ── Priority Label Helper ──────────────────────────────────
+  function getPriorityInfo(idx) {
+    if (idx === 0) return { label: 'High', cls: 'priority-high' };
+    if (idx === 1) return { label: 'Medium', cls: 'priority-medium' };
+    return { label: 'Low', cls: 'priority-low' };
+  }
 
   // ── Render: Benefit Grid ────────────────────────────────────
   function renderBenefitGrid() {
     var grid = document.getElementById('benefitGrid');
     grid.innerHTML = '';
 
+    // Ensure all non-archived benefits are in selectedBenefits (preserving order)
     BENEFITS.forEach(function(b) {
+      if (!archivedBenefits[b.id] && selectedBenefits.indexOf(b.id) === -1) {
+        selectedBenefits.push(b.id);
+      }
+    });
+
+    // Render in selectedBenefits order (drag order = priority order)
+    selectedBenefits.forEach(function(benefitId) {
+      var b = BENEFITS.find(function(x) { return x.id === benefitId; });
+      if (!b || archivedBenefits[b.id]) return;
+
       var idx = selectedBenefits.indexOf(b.id);
-      var isSelected = idx !== -1;
+      var pri = getPriorityInfo(idx);
 
       var card = document.createElement('div');
-      card.className = 'benefit-card' + (isSelected ? ' selected' : '');
+      card.className = 'benefit-card selected';
       card.setAttribute('data-benefit-id', b.id);
-      if (isSelected) card.setAttribute('draggable', 'true');
+      card.setAttribute('draggable', 'true');
 
       // Build tools HTML
       var toolsHtml = '<div class="benefit-tools">';
@@ -961,20 +1128,52 @@
       });
       toolsHtml += '</div>';
 
-      card.innerHTML =
-        '<div class="drag-handle" title="Drag to reorder">&#9776;</div>' +
-        '<div class="badge">' + (isSelected ? idx + 1 : '') + '</div>' +
-        '<div class="benefit-header">' +
-          '<div class="benefit-icon">' + b.icon + '</div>' +
-          '<div class="benefit-title">' + b.title + '</div>' +
-        '</div>' +
-        '<div class="benefit-desc">' + b.desc + '</div>' +
-        toolsHtml;
+      // Priority label
+      var priLabel = '<span class="benefit-priority-label ' + pri.cls + '">' + pri.label + '</span>';
 
-      // Click to select/deselect
-      card.onclick = function(e) {
-        if (e.target.closest('.drag-handle')) return;
-        toggleBenefit(b.id);
+      // Star / Archive button states
+      var isStarred = !!starredBenefits[b.id];
+      var starCls = isStarred ? ' starred' : '';
+      var starIcon = isStarred ? '&#9733;' : '&#9734;';
+
+      card.innerHTML =
+        '<div class="benefit-card-row">' +
+          '<div class="drag-handle" title="Drag to reorder">&#9776;</div>' +
+          '<div class="benefit-card-body">' +
+            '<div class="benefit-header">' +
+              '<div class="benefit-icon">' + b.icon + '</div>' +
+              '<div class="benefit-title">' + b.title + '</div>' +
+              priLabel +
+            '</div>' +
+            '<div class="benefit-desc">' + b.desc + '</div>' +
+            toolsHtml +
+          '</div>' +
+          '<div class="benefit-card-actions">' +
+            '<button class="benefit-action-btn' + starCls + '" data-action="star" title="Star">' + starIcon + '</button>' +
+            '<button class="benefit-action-btn" data-action="archive" title="Archive">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 8-2-3H5L3 8"/><rect x="3" y="8" width="18" height="13" rx="1"/><path d="M10 12h4"/></svg>' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+
+      // Star button
+      card.querySelector('[data-action="star"]').onclick = function(e) {
+        e.stopPropagation();
+        starredBenefits[b.id] = !starredBenefits[b.id];
+        saveState();
+        renderBenefitGrid();
+      };
+
+      // Archive button
+      card.querySelector('[data-action="archive"]').onclick = function(e) {
+        e.stopPropagation();
+        // Deselect if selected
+        var selIdx = selectedBenefits.indexOf(b.id);
+        if (selIdx !== -1) selectedBenefits.splice(selIdx, 1);
+        archivedBenefits[b.id] = true;
+        saveState();
+        renderBenefitGrid();
+        showToast(b.title + ' archived. Refresh to restore.');
       };
 
       // Drag events
@@ -995,8 +1194,7 @@
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         var targetId = card.getAttribute('data-benefit-id');
-        // Only show drag-over if both source and target are selected
-        if (dragSourceId && selectedBenefits.indexOf(targetId) !== -1 && targetId !== dragSourceId) {
+        if (dragSourceId && targetId !== dragSourceId) {
           card.classList.add('drag-over');
         }
       });
@@ -1104,22 +1302,27 @@
 
   function toggleTask(taskId, event) {
     event.stopPropagation();
-    if (completedTasks[taskId]) {
+    var allTasks = getAllTasks();
+    var task = allTasks.find(function(t) { return t.id === taskId; });
+    var wasCompleted = !!completedTasks[taskId];
+
+    if (wasCompleted) {
       delete completedTasks[taskId];
     } else {
       completedTasks[taskId] = true;
-      var allTasks = getAllTasks();
-      var task = allTasks.find(function(t) { return t.id === taskId; });
-      var taskData = {
-        taskId: taskId,
-        taskName: task ? task.name : taskId,
-        tool: task ? task.tool : '',
-        completedCount: Object.keys(completedTasks).length,
-        totalCount: allTasks.length,
-      };
-      sendWebhook('task_completed', taskData);
-      notifyParent('task_completed', taskData);
     }
+
+    var eventName = wasCompleted ? 'task_unchecked' : 'task_completed';
+    var taskData = {
+      taskId: taskId,
+      taskName: task ? task.name : taskId,
+      tool: task ? task.tool : '',
+      completedCount: Object.keys(completedTasks).length,
+      totalCount: allTasks.length,
+    };
+    sendWebhook(eventName, taskData);
+    notifyParent(eventName, taskData);
+
     saveState();
     renderTaskList();
   }
@@ -1135,16 +1338,6 @@
 
   // ── Navigation ──────────────────────────────────────────────
   function goToScreen(index) {
-    if (currentScreen === 0 && index > 0) {
-      var name = document.getElementById('contactName').value.trim();
-      var business = document.getElementById('businessName').value.trim();
-      var email = document.getElementById('contactEmail').value.trim();
-      if (!name || !business || !email) {
-        showToast('Please fill in your name, business name, and email.');
-        return;
-      }
-    }
-
     currentScreen = index;
 
     CONFIG.screens.forEach(function(id, i) {
@@ -1157,7 +1350,7 @@
     }
 
     saveState();
-    renderProgressBar();
+    renderTabBar();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1286,15 +1479,18 @@
   window.tnowSubmitOnboarding = submitOnboarding;
 
   // ── Initialize ──────────────────────────────────────────────
-  loadState();
-  renderProgressBar();
-  renderBenefitGrid();
-  if (selectedBenefits.length > 0) {
-    renderTaskList();
-  }
-  if (currentScreen > 0) {
-    goToScreen(currentScreen);
-  }
+  (async function init() {
+    await loadState();
+    renderTabBar();
+    renderBenefitGrid();
+    if (selectedBenefits.length > 0) {
+      renderTaskList();
+    }
+    if (currentScreen > 0) {
+      goToScreen(currentScreen);
+    }
+  })();
+
 })();
 </script>
 
