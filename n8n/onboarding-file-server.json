@@ -1,0 +1,190 @@
+{
+  "name": "TattooNOW — Onboarding File Server",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "tattoonow-onboarding",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [400, 300],
+      "id": "wh-onboarding-001",
+      "name": "Webhook GET",
+      "webhookId": "tattoonow-onboarding"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine which file to fetch based on ?file= query param\n// Supported files: onboarding, launchpad-checklist, dashboard, onboarding-embed\nconst query = $json.query || {};\nconst fileParam = (query.file || 'onboarding').toLowerCase().trim();\n\n// Map file param to actual filename\nconst FILE_MAP = {\n  'onboarding': 'onboarding.html',\n  'launchpad': 'launchpad-checklist.html',\n  'launchpad-checklist': 'launchpad-checklist.html',\n  'checklist': 'launchpad-checklist.html',\n  'dashboard': 'dashboard.html',\n  'onboarding-embed': 'onboarding-embed.js',\n  'launchpad-embed': 'launchpad-embed.js'\n};\n\nconst fileName = FILE_MAP[fileParam];\n\nif (!fileName) {\n  return [{\n    json: {\n      error: true,\n      message: 'Unknown file: ' + fileParam + '. Available: ' + Object.keys(FILE_MAP).join(', '),\n      contentType: 'application/json'\n    }\n  }];\n}\n\n// Determine content type\nconst contentType = fileName.endsWith('.js') ? 'application/javascript' : 'text/html';\n\n// BUILD YOUR GITHUB RAW URL HERE\n// Option A: GitHub Pages (after enabling Pages on your repo)\n//   const baseUrl = 'https://tattoonow.github.io/tattoo-artist-suite/';\n// Option B: GitHub raw content (works immediately, no Pages setup needed)\n//   const baseUrl = 'https://raw.githubusercontent.com/TattooNOW/tattoo-artist-suite/main/public/';\n// \n// UPDATE THIS URL to match your actual GitHub repo:\nconst baseUrl = 'https://raw.githubusercontent.com/TattooNOW/tattoo-artist-suite/main/public/';\n\nreturn [{\n  json: {\n    fetchUrl: baseUrl + fileName,\n    fileName: fileName,\n    contentType: contentType,\n    error: false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300],
+      "id": "code-resolve-file",
+      "name": "Resolve File"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "error-check",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [840, 300],
+      "id": "if-error",
+      "name": "Has Error?"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ error: $json.message }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1060, 200],
+      "id": "respond-error",
+      "name": "Respond Error"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.fetchUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 400],
+      "id": "http-fetch-file",
+      "name": "Fetch from GitHub"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.body }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "={{ $('Resolve File').first().json.contentType }}"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "public, max-age=300"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1280, 400],
+      "id": "respond-html",
+      "name": "Respond HTML"
+    }
+  ],
+  "connections": {
+    "Webhook GET": {
+      "main": [
+        [
+          {
+            "node": "Resolve File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve File": {
+      "main": [
+        [
+          {
+            "node": "Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch from GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch from GitHub": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
