@@ -1374,15 +1374,49 @@
     }
   }
 
-  // Load from localStorage first (instant), then try Sheets for latest data
+  // ── Load task definitions from Google Sheet ─────────────────
+  function loadTasksFromSheets(callback) {
+    if (!APPS_SCRIPT_URL) { callback(false); return; }
+    fetch(APPS_SCRIPT_URL + '?action=loadTasks&secretKey=' + APPS_SCRIPT_SECRET)
+      .then(function(resp) { return resp.json(); })
+      .then(function(result) {
+        if (result.success && result.benefits && result.benefits.length > 0) {
+          // Merge sheet data into BENEFITS: update titles, tasks, etc.
+          // Keep hardcoded icons/desc/tools since the sheet doesn't store those
+          result.benefits.forEach(function(sheetBenefit) {
+            var existing = BENEFITS.find(function(b) { return b.id === sheetBenefit.id; });
+            if (existing) {
+              existing.title = sheetBenefit.title;
+              // Replace tasks with sheet versions (keeps desc, name, tool from sheet)
+              if (sheetBenefit.tasks && sheetBenefit.tasks.length > 0) {
+                existing.tasks = sheetBenefit.tasks;
+              }
+            }
+          });
+          callback(true);
+        } else {
+          callback(false);
+        }
+      })
+      .catch(function() {
+        console.log('[Onboarding] Sheet task load failed, using hardcoded definitions');
+        callback(false);
+      });
+  }
+
+  // ── Boot sequence ─────────────────────────────────────────
+  // 1. Load from localStorage (instant)
   loadState();
   initUI();
 
-  loadFromSheets(function(sheetsData) {
-    if (sheetsData) {
-      applyStateData(sheetsData);
-      initUI();
-    }
+  // 2. Fetch task definitions from the sheet, then client state
+  loadTasksFromSheets(function() {
+    loadFromSheets(function(sheetsData) {
+      if (sheetsData) {
+        applyStateData(sheetsData);
+      }
+      initUI(); // re-render with sheet task names + restored state
+    });
   });
 })();
 </script>
