@@ -1,22 +1,37 @@
 /**
- * TattooNOW Onboarding — HighLevel Embed Script
+ * TattooNOW Onboarding — HighLevel Embed Script (fetch-and-inject)
  *
- * Usage: Add to a HighLevel custom page (Custom Code element or HTML block):
+ * Fetches onboarding.html from n8n (or GitHub Pages) and injects it
+ * inline into the HighLevel page. CSS is scoped under .tnow-onboarding
+ * so it won't leak into the host page.
  *
- *   <div id="tattoonow-onboarding"></div>
- *   <script src="https://YOUR_DOMAIN/onboarding-embed.js"></script>
+ * === QUICK EMBED (inline snippet for HighLevel page) ===
  *
- * Or with options:
+ *   <div id="tnow-onboarding-loader"></div>
+ *   <script>
+ *   fetch('https://tn.reinventingai.com/webhook/YOUR_WEBHOOK_ID?file=onboarding')
+ *     .then(function(r) { return r.text(); })
+ *     .then(function(html) {
+ *       var c = document.getElementById('tnow-onboarding-loader');
+ *       c.innerHTML = html;
+ *       c.querySelectorAll('script').forEach(function(old) {
+ *         var s = document.createElement('script');
+ *         s.textContent = old.textContent;
+ *         old.parentNode.replaceChild(s, old);
+ *       });
+ *     });
+ *   </script>
  *
- *   <div id="tattoonow-onboarding"></div>
+ * === SCRIPT EMBED (using this file) ===
+ *
+ *   <div id="tnow-onboarding-loader"></div>
  *   <script>
  *     window.TattooNOWOnboardingConfig = {
- *       containerId: 'tattoonow-onboarding',            // default
- *       baseUrl: 'https://YOUR_DOMAIN',                  // where onboarding.html is hosted
- *       webhookUrl: 'https://your-n8n-or-ghl-webhook-url',  // optional
- *       onPrioritiesSelected: function(data) { console.log('Priorities:', data); },
- *       onTaskComplete: function(data) { console.log('Task done:', data); },
- *       onComplete: function(data) { console.log('Onboarding done:', data); },
+ *       // REQUIRED: URL that returns the onboarding HTML
+ *       fetchUrl: 'https://tn.reinventingai.com/webhook/YOUR_WEBHOOK_ID?file=onboarding',
+ *       // Optional overrides:
+ *       containerId: 'tnow-onboarding-loader',  // default
+ *       webhookUrl: '',                           // n8n webhook for form submissions
  *     };
  *   </script>
  *   <script src="https://YOUR_DOMAIN/onboarding-embed.js"></script>
@@ -24,33 +39,20 @@
 (function() {
     'use strict';
 
-    // ── Configuration ────────────────────────────────────
     var defaults = {
-        containerId: 'tattoonow-onboarding',
-        baseUrl: '',   // Auto-detect from script src if empty
+        containerId: 'tnow-onboarding-loader',
+        fetchUrl: '',
         webhookUrl: '',
-        onPrioritiesSelected: null,
-        onTaskComplete: null,
-        onComplete: null,
     };
 
     var config = Object.assign({}, defaults, window.TattooNOWOnboardingConfig || {});
 
-    // ── Auto-detect base URL from this script's src ──────
-    if (!config.baseUrl) {
-        try {
-            var scripts = document.getElementsByTagName('script');
-            for (var i = scripts.length - 1; i >= 0; i--) {
-                var src = scripts[i].src || '';
-                if (src.includes('onboarding-embed')) {
-                    config.baseUrl = src.substring(0, src.lastIndexOf('/'));
-                    break;
-                }
-            }
-        } catch (e) { /* fallback to relative */ }
+    if (!config.fetchUrl) {
+        console.error('[TattooNOW Onboarding] No fetchUrl configured. Set window.TattooNOWOnboardingConfig.fetchUrl');
+        return;
     }
 
-    // ── Extract locationId from parent page URL ──────────
+    // Append URL params (locationId, webhookUrl, etc.) to the fetch URL
     var parentParams = new URLSearchParams(window.location.search);
     var locationId = parentParams.get('locationId')
         || parentParams.get('location_id')
@@ -58,24 +60,15 @@
         || parentParams.get('loc')
         || '';
 
-    // ── Build iframe src ─────────────────────────────────
-    var iframeParams = new URLSearchParams();
-    if (locationId) iframeParams.set('locationId', locationId);
-    if (config.webhookUrl) iframeParams.set('webhookUrl', config.webhookUrl);
+    // Build params to append to the page URL so the injected script can read them
+    var extraParams = new URLSearchParams(window.location.search);
+    if (locationId && !extraParams.has('locationId')) {
+        extraParams.set('locationId', locationId);
+    }
+    if (config.webhookUrl && !extraParams.has('webhookUrl')) {
+        extraParams.set('webhookUrl', config.webhookUrl);
+    }
 
-    // Pass through additional parent params
-    ['studioType', 'studio_type', 'package', 'theme'].forEach(function(key) {
-        var val = parentParams.get(key);
-        if (val) iframeParams.set(key, val);
-    });
-
-    var basePath = config.baseUrl
-        ? config.baseUrl + '/onboarding.html'
-        : 'onboarding.html';
-    var paramString = iframeParams.toString();
-    var iframeSrc = paramString ? basePath + '?' + paramString : basePath;
-
-    // ── Create iframe ────────────────────────────────────
     function init() {
         var container = document.getElementById(config.containerId);
         if (!container) {
@@ -86,59 +79,34 @@
             return;
         }
 
-        var iframe = document.createElement('iframe');
-        iframe.id = 'tattoonow-onboarding-iframe';
-        iframe.src = iframeSrc;
-        iframe.style.cssText = 'width:100%;height:100vh;border:none;display:block;';
-        iframe.setAttribute('allow', 'clipboard-write; encrypted-media');
-        iframe.setAttribute('allowfullscreen', 'true');
+        fetch(config.fetchUrl)
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+            })
+            .then(function(html) {
+                container.innerHTML = html;
 
-        container.innerHTML = '';
-        container.style.cssText = 'width:100%;min-height:100vh;overflow:hidden;';
-        container.appendChild(iframe);
+                // Re-execute scripts (innerHTML doesn't run <script> tags)
+                container.querySelectorAll('script').forEach(function(old) {
+                    var s = document.createElement('script');
+                    s.textContent = old.textContent;
+                    old.parentNode.replaceChild(s, old);
+                });
 
-        console.log('[TattooNOW Onboarding] Embedded:', iframeSrc);
+                console.log('[TattooNOW Onboarding] Loaded and injected');
+            })
+            .catch(function(err) {
+                console.error('[TattooNOW Onboarding] Failed to load:', err);
+                container.innerHTML = '<p style="color:#999;text-align:center;padding:2rem;">Onboarding is temporarily unavailable. Please refresh or try again later.</p>';
+            });
     }
-
-    // ── Listen for postMessage from iframe ───────────────
-    window.addEventListener('message', function(event) {
-        if (!event.data || event.data.source !== 'tattoonow-onboarding') return;
-
-        var evtType = event.data.event;
-        var evtData = event.data.data || {};
-
-        console.log('[TattooNOW Onboarding] Event:', evtType, evtData);
-
-        switch (evtType) {
-            case 'priorities_selected':
-                if (typeof config.onPrioritiesSelected === 'function') {
-                    config.onPrioritiesSelected(evtData);
-                }
-                break;
-            case 'task_completed':
-                if (typeof config.onTaskComplete === 'function') {
-                    config.onTaskComplete(evtData);
-                }
-                break;
-            case 'onboarding_complete':
-                if (typeof config.onComplete === 'function') {
-                    config.onComplete(evtData);
-                }
-                break;
-        }
-    });
 
     // ── Expose global API ────────────────────────────────
     window.TattooNOWOnboarding = {
         config: config,
         locationId: locationId,
-        getIframe: function() {
-            return document.getElementById('tattoonow-onboarding-iframe');
-        },
-        reload: function() {
-            var iframe = this.getIframe();
-            if (iframe) iframe.src = iframeSrc;
-        },
+        reload: init,
     };
 
     // ── Initialize ───────────────────────────────────────
