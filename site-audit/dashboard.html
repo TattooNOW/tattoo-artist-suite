@@ -657,9 +657,10 @@
 
         (async () => {
           try {
-            const { data: siteData, error: siteErr } = await db.from('sites').select('*').eq('ghl_location_id', locationId).single();
+            const { data: siteData, error: siteErr } = await db.from('sites').select('*').eq('ghl_location_id', locationId).maybeSingle();
             if (siteErr) throw siteErr;
             if (canceled) return;
+            if (!siteData) { setLoading(false); return; }
             setSite(siteData);
 
             // Fetch all tables in parallel — gracefully handle missing tables
