@@ -1462,17 +1462,6 @@
     goToScreen(currentScreen);
   }
 
-  // Log page view (for future throttling — e.g. once per week per location)
-  sendWebhook('page_viewed', {
-    contactName: CONTACT_NAME,
-    contactEmail: CONTACT_EMAIL,
-    locationName: LOCATION_NAME,
-    locationWebsite: LOCATION_WEBSITE,
-    userAgent: navigator.userAgent,
-    referrer: document.referrer,
-    currentScreen: currentScreen,
-    hasSavedState: selectedBenefits.length > 0,
-  });
 })();
 </script>
 
