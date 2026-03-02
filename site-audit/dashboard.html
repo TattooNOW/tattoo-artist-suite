@@ -81,7 +81,7 @@
     /* ── Component: Run Audit Button ─────────────────────── */
     const AUDIT_WEBHOOK = 'https://tn.reinventingai.com/webhook/run-audit';
 
-    function RunAuditButton({ locationId, lastAuditDate, showForm, defaults }) {
+    function RunAuditButton({ locationId, lastAuditDate, showForm, defaults, onAuditStarted }) {
       const [status, setStatus] = React.useState('idle'); // idle | running | done | error
       const [domain, setDomain] = React.useState(defaults?.website || '');
       const [address, setAddress] = React.useState(defaults?.address || '');
@@ -90,6 +90,7 @@
       const runAudit = async () => {
         if (!domain) return;
         setStatus('running');
+        if (onAuditStarted) onAuditStarted();
         try {
           const res = await fetch(AUDIT_WEBHOOK, {
             method: 'POST',
@@ -97,62 +98,206 @@
             body: JSON.stringify({ locationId, domain, address, phone })
           });
           console.log('Webhook response:', res.status, res.ok);
-          // Webhook returns 200 immediately, audit runs in background
           setStatus('done');
-          setTimeout(() => window.location.reload(), 25000);
         } catch (e) {
           console.error('Audit trigger failed:', e);
-          // Even on error, the webhook likely fired — try reloading
           setStatus('done');
-          setTimeout(() => window.location.reload(), 25000);
         }
       };
 
-      const btnStyles = {
-        idle: { background:'#EA9320', color:'#000', cursor:'pointer', border:'none' },
-        running: { background:'#333', color:'#888', cursor:'wait', border:'1px solid #444' },
-        done: { background:'#4ade80', color:'#000', cursor:'default', border:'none' },
-        error: { background:'#f87171', color:'#000', cursor:'pointer', border:'none' },
-      };
-      const btnText = { idle: showForm ? 'Request Your Free Audit' : 'Run Audit', running:'Sending...', done:'Audit Running \u2014 Reloading shortly...', error:'Failed \u2014 Retry?' };
       const inputStyle = { background:'#111', color:'#fafafa', border:'1px solid #333', padding:'0.5rem 0.75rem', borderRadius:'4px', width:'100%', fontSize:'0.9rem', fontFamily:'Roboto, sans-serif', boxSizing:'border-box' };
 
+      /* Inline refresh button (non-CTA, used inside dashboard) */
+      if (!showForm) {
+        const btnStyles = {
+          idle: { background:'#EA9320', color:'#000', cursor:'pointer', border:'none' },
+          running: { background:'#333', color:'#888', cursor:'wait', border:'1px solid #444' },
+          done: { background:'#4ade80', color:'#000', cursor:'default', border:'none' },
+        };
+        const btnText = { idle:'Run Audit', running:'Sending...', done:'Audit Running...' };
+        return (
+          <section className="card" style={{marginBottom:'2rem', border:'1px solid #333', textAlign:'center', padding:'2rem'}}>
+            <h3 style={{marginTop:0, color:'#888'}}>Refresh Audit Data</h3>
+            <button type="button" onClick={status !== 'running' && status !== 'done' ? runAudit : undefined}
+              disabled={status === 'running' || status === 'done'}
+              style={{ padding:'0.75rem 2rem', fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1rem', borderRadius:'6px', transition:'background 0.2s', ...btnStyles[status] }}>
+              {btnText[status]}
+            </button>
+            <p style={{color:'#555', fontSize:'0.8rem', marginTop:'0.75rem', marginBottom:0}}>
+              {lastAuditDate ? `Auto-runs every Sunday at 3am \u2022 Last run: ${lastAuditDate}` : 'Takes about 30 seconds'}
+            </p>
+          </section>
+        );
+      }
+
+      /* Full CTA form */
       return (
         <section className="card" style={{marginBottom:'2rem', border:'1px solid #333', textAlign:'center', padding:'2rem'}}>
-          <h3 style={{marginTop:0, color:'#888'}}>{showForm ? 'Run Your First Audit' : 'Refresh Audit Data'}</h3>
-          {showForm && (
-            <div style={{maxWidth:'400px', margin:'0 auto 1.5rem', textAlign:'left', display:'flex', flexDirection:'column', gap:'0.75rem'}}>
-              <div>
-                <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Website</label>
-                <input value={domain} onChange={e => setDomain(e.target.value)} placeholder="example.com" style={inputStyle} />
-              </div>
-              <div>
-                <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Business Address</label>
-                <input value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, City, ST 00000" style={inputStyle} />
-              </div>
-              <div>
-                <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Business Phone</label>
-                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" style={inputStyle} />
-              </div>
+          <h3 style={{marginTop:0, color:'#888'}}>Run Your First Audit</h3>
+          <div style={{maxWidth:'400px', margin:'0 auto 1.5rem', textAlign:'left', display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+            <div>
+              <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Website</label>
+              <input value={domain} onChange={e => setDomain(e.target.value)} placeholder="example.com" style={inputStyle} />
             </div>
-          )}
-          <button
-            type="button"
-            onClick={status !== 'running' && status !== 'done' ? runAudit : undefined}
-            disabled={status === 'running' || status === 'done' || (!domain && showForm)}
+            <div>
+              <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Business Address</label>
+              <input value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, City, ST 00000" style={inputStyle} />
+            </div>
+            <div>
+              <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Business Phone</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" style={inputStyle} />
+            </div>
+          </div>
+          <button type="button" onClick={runAudit} disabled={!domain}
             style={{
-              padding:'0.75rem 2rem',
-              fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1rem',
+              padding:'0.75rem 2rem', fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1rem',
               borderRadius:'6px', transition:'background 0.2s',
-              ...((!domain && showForm) ? { background:'#333', color:'#666', cursor:'not-allowed', border:'1px solid #444' } : btnStyles[status])
-            }}
-          >
-            {btnText[status]}
+              ...(!domain ? { background:'#333', color:'#666', cursor:'not-allowed', border:'1px solid #444' }
+                         : { background:'#EA9320', color:'#000', cursor:'pointer', border:'none' })
+            }}>
+            Request Your Free Audit
           </button>
-          <p style={{color:'#555', fontSize:'0.8rem', marginTop:'0.75rem', marginBottom:0}}>
-            {lastAuditDate ? `Auto-runs every Sunday at 3am \u2022 Last run: ${lastAuditDate}` : 'Takes about 30 seconds'}
-          </p>
+          <p style={{color:'#555', fontSize:'0.8rem', marginTop:'0.75rem', marginBottom:0}}>Takes about 30 seconds</p>
         </section>
+      );
+    }
+
+    /* ── Component: Audit Processing Screen ───────────────── */
+    function AuditProcessingScreen({ locationId }) {
+      const [dots, setDots] = React.useState('');
+      const [elapsed, setElapsed] = React.useState(0);
+      const [found, setFound] = React.useState(false);
+
+      const steps = [
+        { label: 'Crawling your website', time: 5 },
+        { label: 'Analyzing HTML & content', time: 12 },
+        { label: 'Scoring SEO signals', time: 18 },
+        { label: 'Checking AI discoverability', time: 22 },
+        { label: 'Evaluating GEO readiness', time: 26 },
+        { label: 'Generating your report', time: 30 },
+      ];
+
+      // Animate dots
+      React.useEffect(() => {
+        const iv = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500);
+        return () => clearInterval(iv);
+      }, []);
+
+      // Track elapsed time
+      React.useEffect(() => {
+        const iv = setInterval(() => setElapsed(e => e + 1), 1000);
+        return () => clearInterval(iv);
+      }, []);
+
+      // Poll Supabase for audit results every 5 seconds
+      React.useEffect(() => {
+        if (!locationId) return;
+        let canceled = false;
+
+        const poll = async () => {
+          try {
+            const { data: siteData } = await db.from('sites').select('id').eq('ghl_location_id', locationId).maybeSingle();
+            if (!siteData || canceled) return;
+            const { data: audits } = await db.from('audits').select('id').eq('site_id', siteData.id).limit(1);
+            if (canceled) return;
+            if (audits && audits.length > 0) {
+              setFound(true);
+              setTimeout(() => window.location.reload(), 1500);
+            }
+          } catch (e) {
+            console.error('Poll error:', e);
+          }
+        };
+
+        // Start polling after 8 seconds, then every 5 seconds
+        let pollIv = null;
+        const start = setTimeout(() => {
+          poll();
+          pollIv = setInterval(poll, 5000);
+        }, 8000);
+
+        return () => { canceled = true; clearTimeout(start); if (pollIv) clearInterval(pollIv); };
+      }, [locationId]);
+
+      const currentStep = steps.reduce((acc, s) => elapsed >= s.time ? s : acc, steps[0]);
+      const progress = Math.min((elapsed / 35) * 100, found ? 100 : 95);
+
+      return (
+        <div className="container" style={{textAlign:'center', paddingTop:'4rem', maxWidth:'600px'}}>
+          {/* Animated spinner */}
+          <div style={{marginBottom:'2rem'}}>
+            <div style={{
+              width:'80px', height:'80px', margin:'0 auto',
+              border:'4px solid #333', borderTop:'4px solid #EA9320',
+              borderRadius:'50%',
+              animation: found ? 'none' : 'spin 1s linear infinite',
+              background: found ? '#4ade80' : 'transparent',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              transition:'all 0.5s',
+            }}>
+              {found && <span style={{fontSize:'2rem'}}>&#x2714;</span>}
+            </div>
+          </div>
+
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+          `}} />
+
+          <h1 style={{margin:'0 0 0.5rem 0', color: found ? '#4ade80' : '#fafafa'}}>
+            {found ? 'Audit Complete!' : 'Analyzing Your Site'}
+          </h1>
+
+          <p style={{color:'#EA9320', fontSize:'1.2rem', fontWeight:500, margin:'0 0 2rem 0', minHeight:'1.5em'}}>
+            {found ? 'Loading your report...' : currentStep.label + dots}
+          </p>
+
+          {/* Progress bar */}
+          <div style={{maxWidth:'400px', margin:'0 auto 2rem'}}>
+            <div className="progress-bar" style={{height:'10px', borderRadius:'5px'}}>
+              <div className="progress-fill" style={{
+                width: progress + '%',
+                background: found ? '#4ade80' : 'linear-gradient(90deg, #EA9320, #f5c542)',
+                transition:'width 1s ease-out',
+              }} />
+            </div>
+            <p style={{color:'#666', fontSize:'0.8rem', marginTop:'0.5rem'}}>
+              {found ? 'Done!' : `${Math.round(progress)}% \u2022 ${elapsed}s elapsed`}
+            </p>
+          </div>
+
+          {/* Step checklist */}
+          <div style={{textAlign:'left', maxWidth:'350px', margin:'0 auto'}}>
+            {steps.map((s, i) => {
+              const done = elapsed >= s.time;
+              const active = currentStep === s && !done;
+              return (
+                <div key={i} style={{
+                  display:'flex', alignItems:'center', gap:'0.75rem',
+                  padding:'0.4rem 0', color: done ? '#4ade80' : active ? '#EA9320' : '#555',
+                  fontSize:'0.9rem',
+                }}>
+                  <span style={{width:'20px', textAlign:'center'}}>
+                    {done ? '\u2713' : active ? '\u25CB' : '\u25CB'}
+                  </span>
+                  <span style={{animation: active ? 'pulse 1.5s ease-in-out infinite' : 'none'}}>
+                    {s.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {elapsed > 60 && !found && (
+            <p style={{color:'#f87171', fontSize:'0.85rem', marginTop:'2rem'}}>
+              Taking longer than expected... <a href="javascript:void(0)" onClick={() => window.location.reload()} style={{color:'#EA9320'}}>Reload manually</a>
+            </p>
+          )}
+
+          <footer style={{marginTop:'3rem', padding:'1rem 0', borderTop:'1px solid #222', fontSize:'0.8rem', color:'#666'}}>
+            Powered by <a href="https://tattoonow.com" target="_blank">TattooNOW</a>
+          </footer>
+        </div>
       );
     }
 
@@ -725,6 +870,7 @@
       const [competitors, setCompetitors] = React.useState([]);
       const [linkChecklist, setLinkChecklist] = React.useState([]);
       const [activeTab, setActiveTab] = React.useState('overview');
+      const [auditRunning, setAuditRunning] = React.useState(false);
 
       React.useEffect(() => {
         if (!locationId) { setLoading(false); return; }
@@ -779,6 +925,9 @@
 
       /* ── Empty / No-Data State — friendly CTA ─────────── */
       if (error || !site || audits.length === 0) {
+        if (auditRunning) {
+          return <AuditProcessingScreen locationId={locationId} />;
+        }
         return (
           <div className="container" style={{textAlign:'center', paddingTop:'4rem', maxWidth:'600px'}}>
             <div style={{fontSize:'4rem', marginBottom:'1rem'}}>&#x1F50D;</div>
@@ -786,7 +935,7 @@
             <p style={{color:'#888', fontSize:'1.1rem', margin:'0 0 2rem 0'}}>
               {site ? site.business_name : 'Your business'} doesn't have an audit report yet.
             </p>
-            <RunAuditButton locationId={locationId} lastAuditDate={null} showForm={true} defaults={urlDefaults} />
+            <RunAuditButton locationId={locationId} lastAuditDate={null} showForm={true} defaults={urlDefaults} onAuditStarted={() => setAuditRunning(true)} />
             <p style={{color:'#555', fontSize:'0.85rem', marginTop:'1.5rem'}}>
               We'll analyze your site across SEO, AI discoverability, GEO signals, directory listings, and more.
             </p>
