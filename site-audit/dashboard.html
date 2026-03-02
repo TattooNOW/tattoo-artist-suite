@@ -78,8 +78,65 @@
     const statusRowBg = s => ({ listed:'rgba(74,222,128,0.08)', needs_fix:'rgba(251,191,36,0.08)', needs_claim:'rgba(251,191,36,0.08)', not_listed:'rgba(248,113,113,0.08)' }[s] || 'transparent');
     const priorityColor = p => ({ P0:'#ef4444', P1:'#fbbf24', P2:'#60a5fa' }[p] || '#888');
 
+    /* ── Component: Run Audit Button ─────────────────────── */
+    const AUDIT_WEBHOOK = 'https://tn.reinventingai.com/webhook/run-audit';
+
+    function RunAuditButton({ locationId, lastAuditDate }) {
+      const [status, setStatus] = React.useState('idle'); // idle | running | done | error
+
+      const runAudit = async () => {
+        setStatus('running');
+        try {
+          const res = await fetch(AUDIT_WEBHOOK, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ locationId })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setStatus('done');
+            setTimeout(() => window.location.reload(), 2000);
+          } else {
+            setStatus('error');
+          }
+        } catch (e) {
+          console.error('Audit trigger failed:', e);
+          setStatus('error');
+        }
+      };
+
+      const btnStyles = {
+        idle: { background:'#EA9320', color:'#000', cursor:'pointer', border:'none' },
+        running: { background:'#333', color:'#888', cursor:'wait', border:'1px solid #444' },
+        done: { background:'#4ade80', color:'#000', cursor:'default', border:'none' },
+        error: { background:'#f87171', color:'#000', cursor:'pointer', border:'none' },
+      };
+      const btnText = { idle:'Run New Audit', running:'Running...', done:'Done — Reloading...', error:'Failed — Retry?' };
+
+      return (
+        <section className="card" style={{marginBottom:'2rem', border:'1px solid #333', textAlign:'center', padding:'2rem'}}>
+          <h3 style={{marginTop:0, color:'#888'}}>Refresh Audit Data</h3>
+          <button
+            onClick={status !== 'running' && status !== 'done' ? runAudit : undefined}
+            disabled={status === 'running' || status === 'done'}
+            style={{
+              padding:'0.75rem 2rem',
+              fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1rem',
+              borderRadius:'6px', transition:'background 0.2s',
+              ...btnStyles[status]
+            }}
+          >
+            {btnText[status]}
+          </button>
+          <p style={{color:'#555', fontSize:'0.8rem', marginTop:'0.75rem', marginBottom:0}}>
+            Auto-runs every Sunday at 3am &bull; Last run: {lastAuditDate || '\u2014'}
+          </p>
+        </section>
+      );
+    }
+
     /* ── Tab: Overview ───────────────────────────────────── */
-    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, lastAuditDate }) {
+    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, lastAuditDate, locationId }) {
       const seo = scores.seo?.score ?? '\u2014';
       const ai = scores.ai_discoverability?.score ?? '\u2014';
       const geo = scores.geo_readiness?.score ?? '\u2014';
@@ -215,22 +272,7 @@
           </section>
 
           {/* Run Audit / Refresh Data */}
-          <section className="card" style={{marginBottom:'2rem', border:'1px solid #333', textAlign:'center', padding:'2rem'}}>
-            <h3 style={{marginTop:0, color:'#888'}}>Refresh Audit Data</h3>
-            <button
-              disabled
-              style={{
-                padding:'0.75rem 2rem', background:'#333', color:'#666',
-                fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1rem',
-                border:'1px solid #444', borderRadius:'6px', cursor:'not-allowed'
-              }}
-            >
-              Run New Audit
-            </button>
-            <p style={{color:'#555', fontSize:'0.8rem', marginTop:'0.75rem', marginBottom:0}}>
-              Coming soon: weekly automated audits &bull; Last run: {lastAuditDate || '\u2014'}
-            </p>
-          </section>
+          <RunAuditButton locationId={locationId} lastAuditDate={lastAuditDate} />
         </div>
       );
     }
@@ -711,20 +753,7 @@
             <p style={{color:'#888', fontSize:'1.1rem', margin:'0 0 2rem 0'}}>
               {site ? site.business_name : 'Your business'} doesn't have an audit report yet.
             </p>
-            <a
-              href="https://tattoonow.com/contact"
-              target="_blank"
-              rel="noopener"
-              style={{
-                display:'inline-block', padding:'0.9rem 2.5rem', background:'#EA9320', color:'#000',
-                fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1.1rem',
-                textDecoration:'none', borderRadius:'6px', transition:'background 0.2s'
-              }}
-              onMouseOver={e => e.currentTarget.style.background='#d4830f'}
-              onMouseOut={e => e.currentTarget.style.background='#EA9320'}
-            >
-              Request Your Free Audit
-            </a>
+            <RunAuditButton locationId={locationId} lastAuditDate={null} />
             <p style={{color:'#555', fontSize:'0.85rem', marginTop:'1.5rem'}}>
               We'll analyze your site across SEO, AI discoverability, GEO signals, directory listings, and more.
             </p>
@@ -787,7 +816,7 @@
             ))}
           </nav>
 
-          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} lastAuditDate={latest.audit_date} />}
+          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} lastAuditDate={latest.audit_date} locationId={locationId} />}
           {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} />}
           {activeTab === 'core30' && <Core30Tab core30={core30} contentBriefs={contentBriefs} />}
           {activeTab === 'findings' && <FindingsTab latestFindings={latestFindings} />}
