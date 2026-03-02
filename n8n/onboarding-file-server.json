@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "path": "tattoonow-onboarding",
+        "path": "priorities",
         "responseMode": "responseNode",
         "options": {
           "allowedOrigins": "*"
@@ -14,7 +14,7 @@
       "position": [400, 300],
       "id": "wh-onboarding-001",
       "name": "Webhook GET",
-      "webhookId": "tattoonow-onboarding"
+      "webhookId": "priorities"
     },
     {
       "parameters": {
