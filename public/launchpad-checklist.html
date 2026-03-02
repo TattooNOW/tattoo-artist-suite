@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+        // VIDEO CONFIGURATION
+        const VIDEO_CONFIG = {
+            welcomeVideo: { video: 'KpW20D-lyfI' },
+            domainRegistration: { video: '5Vtv9ZBpQFY' },
+            professionalEmail: { video: 'ABDbwbF1BGE' },
+            googleBusinessProfile: { video: 'rSzlmnq_oWA' },
+            localServiceAds: { video: 'mTOI30cTKcM' },
+            googleSearchConsole: { video: 'uoQ-0xREQgQ' },
+            googleAnalytics: { video: 'UuE37-MM1ws' },
+            googleAds: { video: '6zBXoupD-lw' },
+            youtube: { video: '' }, instagram: { video: '' }, facebook: { video: '' },
+            tiktok: { video: '' }, pinterest: { video: '' }, threads: { video: '' },
+            bluesky: { video: '' }, yelp: { video: '' }, linkedin: { video: '' },
+            duns: { video: '' }, bbb: { video: '' }, tattoosSocial: { video: '' },
+            importContacts: { video: '' },
+        };
+        
+        const COMPLETION_REDIRECT_URL = 'https://tools.tattoonow.com/tattoonow-subscribers';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNjZ1kzDqvqCyi45CKgSljCVE5jGbW1Za1iInIXDo6uJvB5b9n7OP6sjV-O1Nu7MjL/exec';
+        const APPS_SCRIPT_SECRET = 'tattoonow_onboarding_2024';
+        
+        // WEBHOOK CONFIGURATION (optional — for n8n / HighLevel notifications)
+        const _params = new URLSearchParams(window.location.search);
+        const WEBHOOK_URL = _params.get('webhookUrl') || _params.get('webhook_url') || '';
+    </script>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Launchpad Checklist</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* LOADING OVERLAY */
+        .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #0a0a0a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.4s ease, visibility 0.4s ease; }
+        .loading-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        .loading-spinner { width: 50px; height: 50px; border: 4px solid rgba(255, 149, 0, 0.2); border-top: 4px solid #ff9500; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.5rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-text { color: #ffffff; font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .loading-subtext { color: #666; font-family: 'Outfit', sans-serif; font-size: 0.9rem; }
+        .main-container { opacity: 0; transition: opacity 0.4s ease; }
+        .main-container.loaded { opacity: 1; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { height: 100%; overflow: hidden; }
+        body { font-family: 'Outfit', sans-serif; background: #0a0a0a; height: 100%; overflow: hidden; }
+        .main-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; position: fixed; top: 0; left: 0; }
+        .sidebar { width: 100%; background: #1a1a1a; border-bottom: 2px solid #333333; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+        .progress-label { font-size: 0.75rem; font-weight: 700; color: #a0a0a0; text-transform: uppercase; letter-spacing: 0.5px; }
+        .progress-wheel-container { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+        .progress-wheel { position: relative; width: 65px; height: 65px; }
+        .progress-wheel svg { transform: rotate(-90deg); }
+        .progress-wheel-bg { fill: none; stroke: #333333; stroke-width: 5; }
+        .progress-wheel-fill { fill: none; stroke: #ff9500; stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+        .progress-wheel-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.15rem; font-weight: 900; color: #ff9500; }
+        .progress-info h2 { font-size: 1.35rem; font-weight: 900; color: #ffffff; line-height: 1.2; margin-bottom: 0.2rem; }
+        .sidebar-nav { display: flex; flex-direction: row; overflow-x: auto; gap: 0.5rem; flex: 1; }
+        .nav-item { padding: 0.5rem 0.75rem; cursor: pointer; transition: all 0.2s ease; border-bottom: 3px solid transparent; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-width: 90px; text-align: center; }
+        .nav-item:hover { background: #151515; }
+        .nav-item.active { background: #2a1f1a; border-bottom-color: #ff9500; }
+        .nav-item.completed .nav-number { background: #666; color: white; }
+        .nav-item.completed .nav-number::after { content: '\2713'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 0.72rem; }
+        .nav-item.completed .nav-number span { opacity: 0; }
+        .nav-item.completed h3 { color: #666; }
+        .nav-number { width: 30px; height: 30px; border-radius: 50%; background: #333333; color: #a0a0a0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; position: relative; }
+        .nav-item.active .nav-number { background: #ff9500; color: white; }
+        .nav-item h3 { font-weight: 600; font-size: 0.9rem; color: #ffffff; }
+        .nav-item.active h3 { font-weight: 700; color: #ff9500; }
+        .content-panel { flex: 1; background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%); display: flex; flex-direction: column; overflow: hidden; }
+        .content-scroll-wrapper { flex: 1; overflow-y: scroll; padding-bottom: 72px; }
+        .content-inner { max-width: 900px; margin: 0 auto; padding: 0.5rem 1rem; width: 100%; }
+        .step-content.full-width .content-inner { max-width: 95%; }
+        .content-header { margin-bottom: 0.5rem; display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+        .step-badge { color: #ff9500; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; }
+        .content-header h2 { font-weight: 900; font-size: 2rem; color: #ffffff; }
+        .content-body { background: #1a1a1a; border-radius: 12px; padding: 0.5rem; box-shadow: 0 2px 8px rgba(255, 149, 0, 0.15); border: 1px solid #333333; }
+        .content-body p { color: #b0b0b0; line-height: 1.65; font-size: 0.98rem; margin-bottom: 1.35rem; }
+        .embedded-video { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 12px; overflow: hidden; background: #000; }
+        .embedded-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .booking-container { background: #fff; padding: 0; border-radius: 12px; border: 1px solid #333333; }
+        .sub-checklist { margin-top: 1.65rem; }
+        .sub-item { display: grid; grid-template-columns: 3fr 1fr; gap: 1.5rem; padding: 1.5rem; background: #1a1a1a; border-radius: 9px; margin-bottom: 1.5rem; border: 1px solid #2a2a2a; }
+        .sub-item.completed { background: #0a0a0a; opacity: 0.6; }
+        .sub-item:hover { background: #0a0a0a; border-color: #e5e5e5; }
+        .sub-item-title { font-size: 1.1rem; font-weight: 700; color: #ffffff; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+        .sub-item-number { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: #0d47a1; color: white; border-radius: 50%; font-size: 0.75rem; font-weight: 700; position: relative; }
+        .sub-item.completed .sub-item-number { background: #28a745; }
+        .sub-item.completed .sub-item-number .number-text { opacity: 0; }
+        .sub-item-number .checkmark { position: absolute; opacity: 0; }
+        .sub-item.completed .sub-item-number .checkmark { opacity: 1; }
+        .sub-item-description { color: #a0a0a0; font-size: 0.88rem; line-height: 1.5; }
+        .sub-item-right { display: flex; flex-direction: column; gap: 0.75rem; justify-content: flex-end; }
+        .mark-complete-btn { background: #ff9500; color: white; padding: 0.6rem 1.25rem; border-radius: 5px; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; font-family: 'Outfit', sans-serif; }
+        .mark-complete-btn:hover { background: #d91616; }
+        .mark-complete-btn.completed { background: #6c757d; }
+        .mini-video-trigger { background: #0d47a1; color: white; padding: 0.6rem 1.25rem; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 0.9rem; border: none; font-family: 'Outfit', sans-serif; }
+        .mini-video-trigger:hover { background: #1565c0; }
+        .platform-link { background: #2e7d32; color: white; padding: 0.6rem 1.25rem; border-radius: 5px; font-weight: 600; font-size: 0.9rem; border: none; text-decoration: none; display: inline-block; text-align: center; font-family: 'Outfit', sans-serif; }
+        .platform-link:hover { background: #388e3c; }
+        .platform-logo { width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle; }
+        .platform-logo[alt="Threads"] { filter: invert(1); }
+        .next-steps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 0.5rem; }
+        .next-step-card { padding: 1.35rem; background: #fff9f5; border-left: 3px solid #2D4B82; border-radius: 8px; }
+        .next-step-card strong { color: #000; display: block; margin-bottom: 0.45rem; }
+        .next-step-card div { color: #000; line-height: 1.55; font-size: 0.92rem; }
+        .bottom-nav { background: #1a1a1a; border-top: 1px solid #e5e5e5; padding: 1.35rem 2.5rem; display: flex; justify-content: space-between; align-items: center; height: 72px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 10; }
+        .bottom-nav-btn { padding: 0.7rem 1.6rem; border-radius: 5px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.92rem; cursor: pointer; border: none; }
+        .btn-back { background: #333333; color: #a0a0a0; }
+        .btn-back:hover:not(:disabled) { background: #e0e0e0; color: #333; }
+        .btn-back:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-complete { background: #ff9500; color: white; margin-right: 80px; }
+        .btn-complete:hover { background: #2D4B82; }
+        .btn-complete.btn-unmark { background: #666; }
+        .btn-next { background: #4CAF50; color: white; }
+        .btn-next:hover { background: #45a049; }
+        .location-debug { background: rgba(255, 149, 0, 0.1); border: 1px solid rgba(255, 149, 0, 0.3); border-radius: 6px; padding: 0.4rem 0.75rem; font-size: 0.7rem; color: #a0a0a0; cursor: pointer; }
+        .location-debug strong { color: #ff9500; }
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.85); z-index: 1000; align-items: center; justify-content: center; padding: 2rem; }
+        .modal.active { display: flex; }
+        .modal-content { background: #000; border-radius: 16px; padding: 1rem; max-width: 1000px; width: 100%; position: relative; }
+        .modal-close { position: absolute; top: -40px; right: 0; background: #ff9500; color: white; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 20px; font-weight: 900; }
+        .video-container { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 12px; overflow: hidden; }
+        .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .confetti-container { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 999; }
+        .confetti { position: absolute; width: 10px; height: 10px; animation: confetti-fall 3s ease-out forwards; }
+        @keyframes confetti-fall { to { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+        .skip-modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 2000; align-items: center; justify-content: center; padding: 2rem; }
+        .skip-modal-overlay.active { display: flex; }
+        .skip-modal-content { background: #1a1a1a; border-radius: 16px; padding: 2rem; max-width: 500px; width: 100%; border: 2px solid #ff9500; text-align: center; }
+        .skip-modal-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .skip-modal-title { color: #ffffff; font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
+        .skip-modal-text { color: #a0a0a0; font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem; }
+        .skip-modal-buttons { display: flex; flex-direction: column; gap: 0.75rem; }
+        .skip-modal-btn { padding: 0.85rem 1.5rem; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; border: none; font-family: 'Outfit', sans-serif; transition: all 0.2s ease; }
+        .skip-modal-btn-primary { background: #4CAF50; color: white; }
+        .skip-modal-btn-primary:hover { background: #45a049; }
+        .skip-modal-btn-secondary { background: #333; color: #a0a0a0; }
+        .skip-modal-btn-secondary:hover { background: #444; color: #fff; }
+        .skip-modal-btn-danger { background: transparent; color: #ff6b6b; border: 1px solid #ff6b6b; font-size: 0.85rem; padding: 0.65rem 1rem; }
+        .skip-modal-btn-danger:hover { background: #ff6b6b; color: white; }
+        @media (max-width: 768px) { .sub-item { grid-template-columns: 1fr; } .next-steps-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <!-- LOADING OVERLAY -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading your progress...</div>
+        <div class="loading-subtext">Please wait a moment</div>
+    </div>
+    <div class="confetti-container" id="confettiContainer"></div>
+    
+    <!-- Skip Confirmation Modal -->
+    <div class="skip-modal-overlay" id="skipModal">
+        <div class="skip-modal-content">
+            <div class="skip-modal-icon">&#129300;</div>
+            <div class="skip-modal-title">Hold on a second!</div>
+            <div class="skip-modal-text">
+                <strong style="color: #ff9500;">Skip All</strong> will permanently mark every step as complete.<br><br>
+                If you just want to <strong style="color: #4CAF50;">move to the next step</strong>, use the "Mark Complete" button at the bottom of the page instead.
+            </div>
+            <div class="skip-modal-buttons">
+                <button class="skip-modal-btn skip-modal-btn-primary" id="skipModalContinue">&#10003; Got it, I'll use "Mark Complete"</button>
+                <button class="skip-modal-btn skip-modal-btn-secondary" id="skipModalCancel">Cancel</button>
+                <div style="border-top: 1px solid #333; margin: 0.75rem 0; padding-top: 0.75rem;">
+                    <p style="color: #666; font-size: 0.8rem; margin-bottom: 0.5rem;">Already completed setup elsewhere?</p>
+                    <button class="skip-modal-btn skip-modal-btn-danger" id="skipModalConfirm">Yes, skip all steps permanently</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-container" id="mainContainer">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="progress-label">Setup Steps:</div>
+                <nav class="sidebar-nav" id="sidebarNav">
+                    <div class="nav-item active" data-step="1"><div class="nav-number"><span>1</span></div><div class="nav-content"><h3>Welcome</h3></div></div>
+                    <div class="nav-item" data-step="2"><div class="nav-number"><span>2</span></div><div class="nav-content"><h3>Onboarding Form</h3></div></div>
+                    <div class="nav-item" data-step="3"><div class="nav-number"><span>3</span></div><div class="nav-content"><h3>Book Call</h3></div></div>
+                    <div class="nav-item" data-step="4"><div class="nav-number"><span>4</span></div><div class="nav-content"><h3>Setup Accounts</h3></div></div>
+                    <div class="nav-item" data-step="5"><div class="nav-number"><span>5</span></div><div class="nav-content"><h3>Social Media</h3></div></div>
+                    <div class="nav-item" data-step="6"><div class="nav-number"><span>6</span></div><div class="nav-content"><h3>Import Contacts</h3></div></div>
+                    <div class="nav-item" data-step="7"><div class="nav-number"><span>7</span></div><div class="nav-content"><h3>Mobile App</h3></div></div>
+                    <div class="nav-item" data-step="8"><div class="nav-number"><span>8</span></div><div class="nav-content"><h3>Next Steps</h3></div></div>
+                </nav>
+                <div class="progress-wheel-container">
+                    <div class="progress-wheel">
+                        <svg width="65" height="65">
+                            <circle class="progress-wheel-bg" cx="32.5" cy="32.5" r="29"></circle>
+                            <circle class="progress-wheel-fill" cx="32.5" cy="32.5" r="29" id="progressCircle" stroke-dasharray="182" stroke-dashoffset="182"></circle>
+                        </svg>
+                        <div class="progress-wheel-text" id="progressPercentage">0%</div>
+                    </div>
+                    <div class="progress-info"><h2 id="progressSteps">0 of 8 steps</h2></div>
+                </div>
+            </div>
+        </aside>
+        <main class="content-panel">
+            <div class="content-scroll-wrapper">
+                <div class="content-inner">
+                    <!-- Step 1: Welcome -->
+                    <div class="step-content" data-step="1">
+                        <div class="content-header">
+                            <div class="step-badge">STEP 1 OF 8</div>
+                            <h2>Your TattooNOW Onboarding Launchpad</h2>
+                        </div>
+                        <div class="content-body">
+                            <div class="embedded-video">
+                                <iframe id="welcomeVideoEmbed" src="" frameborder="0" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+                            </div>
+                            <div style="margin-top: 1.5rem; padding: 1.25rem; background: #0a0a0a; border-radius: 8px; border: 1px solid #333;">
+                                <p style="color: #ffffff; font-size: 1rem; margin: 0 0 0.75rem 0; font-weight: 600;">&#128075; Welcome to your setup checklist!</p>
+                                <p style="color: #a0a0a0; font-size: 0.9rem; margin: 0; line-height: 1.5;">Work through each step at your own pace. When you're ready to move on, click <strong style="color: #ff9500;">"Mark Complete"</strong> at the bottom of the page.</p>
+                            </div>
+                            <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #2a2a2a; text-align: center;">
+                                <p style="color: #666; font-size: 0.8rem; margin-bottom: 0.5rem;">Already completed setup elsewhere?</p>
+                                <button id="skipSetupBtn" style="background: transparent; color: #666; padding: 0.5rem 1rem; border-radius: 5px; border: 1px solid #444; font-size: 0.8rem; cursor: pointer; font-family: 'Outfit', sans-serif;">Skip All Steps</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 2: Onboarding Form -->
+                    <div class="step-content" data-step="2" style="display: none;">
+                        <div class="content-header"><div class="step-badge">STEP 2 OF 8</div><h2>Vital Info &amp; Current Processes</h2></div>
+                        <div class="content-body">
+                            <div id="step2CompletionMessage" style="display: none; text-align: center; padding: 3rem 2rem;">
+                                <div style="background: #1a2a1a; border: 2px solid #4CAF50; border-radius: 12px; padding: 2rem; max-width: 600px; margin: 0 auto;">
+                                    <div style="font-size: 3rem; margin-bottom: 1rem;">&#9989;</div>
+                                    <h3 style="color: #4CAF50; font-size: 1.5rem; margin-bottom: 1rem;">Survey Completed!</h3>
+                                    <p style="color: #ffffff; margin: 0;">You have successfully filled out the onboarding survey.</p>
+                                </div>
+                            </div>
+                            <div id="step2FormContainer">
+                                <p style="color: #a0a0a0; text-align: center; margin-bottom: 1.5rem;">Complete this form to provide us with essential information about your business.</p>
+                                <div class="booking-container" style="text-align: center; padding: 2rem;">
+                                    <button id="surveyButton" style="background: #ff9500; color: white; padding: 1rem 2rem; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; font-size: 1.1rem;">&#128203; Open Survey Form</button>
+                                    <p style="color: #a0a0a0; font-size: 0.85rem; margin-top: 1rem;">Opens in a new window.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 3: Book Call -->
+                    <div class="step-content full-width" data-step="3" style="display: none;">
+                        <div class="content-header"><div class="step-badge">STEP 3 OF 8</div><h2>Book Onboarding Call</h2></div>
+                        <div class="content-body">
+                            <div id="step3CompletionMessage" style="display: none; text-align: center; padding: 3rem 2rem;">
+                                <div style="background: #1a2a1a; border: 2px solid #4CAF50; border-radius: 12px; padding: 2rem; max-width: 600px; margin: 0 auto;">
+                                    <div style="font-size: 3rem; margin-bottom: 1rem;">&#9989;</div>
+                                    <h3 style="color: #4CAF50; font-size: 1.5rem; margin-bottom: 1rem;">Setup Call Booked!</h3>
+                                    <p style="color: #ffffff; margin: 0;">We look forward to speaking with you!</p>
+                                </div>
+                            </div>
+                            <div id="step3CalendarContainer">
+                                <p style="color: #a0a0a0; text-align: center; margin-bottom: 1.5rem;">Schedule your personalized onboarding call.</p>
+                                <div class="booking-container" style="text-align: center; padding: 2rem;">
+                                    <button id="calendarButton" style="background: #ff9500; color: white; padding: 1rem 2rem; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; font-size: 1.1rem;">&#128197; Book Your Setup Call</button>
+                                    <p style="color: #a0a0a0; font-size: 0.85rem; margin-top: 1rem;">Opens in a new window.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 4: Setup Accounts -->
+                    <div class="step-content" data-step="4" style="display: none;">
+                        <div class="content-header"><div class="step-badge">STEP 4 OF 8</div><h2>Setup Accounts</h2></div>
+                        <div class="content-body">
+                            <p style="color: #a0a0a0; text-align: center; margin-bottom: 1.5rem;">Set up and connect your essential business accounts.</p>
+                            <div class="sub-checklist">
+                                <div class="sub-item" data-item-id="domain-name"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">1</span><span class="checkmark">&#10003;</span></span>Domain Name</div><div class="sub-item-description">Register your domain name.</div></div><div class="sub-item-right"><button class="mini-video-trigger" data-video-key="domainRegistration">Watch Tutorial</button><a href="#" class="domain-connect-link platform-link">Configure Domain &#8594;</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="professional-email"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">2</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/google/4285F4" class="platform-logo" alt="Google">Professional Email</div><div class="sub-item-description">Set up professional email with Google Workspace.</div></div><div class="sub-item-right"><button class="mini-video-trigger" data-video-key="professionalEmail">Watch Tutorial</button><a href="https://workspace.google.com" target="_blank" class="platform-link">Open Google Workspace</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="google-business"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">3</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/google/4285F4" class="platform-logo" alt="Google">Google Business Profile</div><div class="sub-item-description">Claim and verify your Google Business Profile.</div></div><div class="sub-item-right"><button class="mini-video-trigger" data-video-key="googleBusinessProfile">Watch Tutorial</button><a href="https://business.google.com" target="_blank" class="platform-link">Open Google Business</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="local-service-ads"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">4</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/googleads/4285F4" class="platform-logo" alt="Ads">Local Service Ads</div><div class="sub-item-description">Set up Local Service Ads.</div></div><div class="sub-item-right"><button class="mini-video-trigger" data-video-key="localServiceAds">Watch Tutorial</button><a href="https://ads.google.com/localservices" target="_blank" class="platform-link">Open Local Services</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="google-search-console"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">5</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/googlesearchconsole/4285F4" class="platform-logo" alt="Search Console">Google Search Console</div><div class="sub-item-description">Monitor your website's search performance.</div></div><div class="sub-item-right"><button class="mini-video-trigger" data-video-key="googleSearchConsole">Watch Tutorial</button><a href="https://search.google.com/search-console" target="_blank" class="platform-link">Open Search Console</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="google-analytics"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">6</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/googleanalytics/E37400" class="platform-logo" alt="Analytics">Google Analytics</div><div class="sub-item-description">Track website traffic with GA4.</div></div><div class="sub-item-right"><button class="mini-video-trigger" data-video-key="googleAnalytics">Watch Tutorial</button><a href="https://analytics.google.com" target="_blank" class="platform-link">Open Analytics</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="google-ads"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">7</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/googleads/4285F4" class="platform-logo" alt="Ads">Google Ads</div><div class="sub-item-description">Create a Google Ads account.</div></div><div class="sub-item-right"><button class="mini-video-trigger" data-video-key="googleAds">Watch Tutorial</button><a href="https://ads.google.com" target="_blank" class="platform-link">Open Google Ads</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="connect-accounts"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">8</span><span class="checkmark">&#10003;</span></span>Connect Accounts to TattooNOW</div><div class="sub-item-description">Link all your Google accounts to TattooNOW.</div></div><div class="sub-item-right"><a href="#" class="accounts-connect-link platform-link">Connect Accounts &#8594;</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 5: Social Media -->
+                    <div class="step-content" data-step="5" style="display: none;">
+                        <div class="content-header"><div class="step-badge">STEP 5 OF 8</div><h2>Social Media</h2></div>
+                        <div class="content-body">
+                            <p style="color: #a0a0a0; text-align: center; margin-bottom: 1.5rem;">Create social media accounts for your business.</p>
+                            <div class="sub-checklist">
+                                <div class="sub-item" data-item-id="youtube"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">1</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/youtube/FF0000" class="platform-logo" alt="YouTube">YouTube</div><div class="sub-item-description">Create your YouTube channel.</div></div><div class="sub-item-right"><a href="https://www.youtube.com/create_channel" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="instagram"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">2</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/instagram/E4405F" class="platform-logo" alt="Instagram">Instagram</div><div class="sub-item-description">Create your Instagram business account.</div></div><div class="sub-item-right"><a href="https://www.instagram.com/accounts/emailsignup/" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="facebook"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">3</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/facebook/1877F2" class="platform-logo" alt="Facebook">Facebook</div><div class="sub-item-description">Create your Facebook business page.</div></div><div class="sub-item-right"><a href="https://www.facebook.com/pages/create" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="tiktok"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">4</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/tiktok/00F2EA" class="platform-logo" alt="TikTok">TikTok</div><div class="sub-item-description">Create your TikTok business account.</div></div><div class="sub-item-right"><a href="https://www.tiktok.com/signup" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="pinterest"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">5</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/pinterest/E60023" class="platform-logo" alt="Pinterest">Pinterest</div><div class="sub-item-description">Create your Pinterest business account.</div></div><div class="sub-item-right"><a href="https://www.pinterest.com/business/create/" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="threads"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">6</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/threads/000000" class="platform-logo" alt="Threads">Threads</div><div class="sub-item-description">Create your Threads account.</div></div><div class="sub-item-right"><a href="https://www.threads.net" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="bluesky"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">7</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/bluesky/1185FE" class="platform-logo" alt="Bluesky">Bluesky</div><div class="sub-item-description">Create your Bluesky account.</div></div><div class="sub-item-right"><a href="https://bsky.app" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="yelp"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">8</span><span class="checkmark">&#10003;</span></span><img src="https://cdn.simpleicons.org/yelp/FF1A1A" class="platform-logo" alt="Yelp">Yelp</div><div class="sub-item-description">Claim your Yelp business page.</div></div><div class="sub-item-right"><a href="https://biz.yelp.com/signup" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="linkedin"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">9</span><span class="checkmark">&#10003;</span></span><img src="https://upload.wikimedia.org/wikipedia/commons/8/81/LinkedIn_icon.svg" class="platform-logo" alt="LinkedIn">LinkedIn</div><div class="sub-item-description">Create your LinkedIn company page.</div></div><div class="sub-item-right"><a href="https://www.linkedin.com/company/setup/new/" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="duns"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">10</span><span class="checkmark">&#10003;</span></span>D&amp;B DUNS Number</div><div class="sub-item-description">Get your DUNS number.</div></div><div class="sub-item-right"><a href="https://www.dnb.com/duns-number/get-a-duns.html" target="_blank" class="platform-link">Get DUNS Number</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="bbb"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">11</span><span class="checkmark">&#10003;</span></span>BBB</div><div class="sub-item-description">Get BBB accredited.</div></div><div class="sub-item-right"><a href="https://www.bbb.org/get-accredited" target="_blank" class="platform-link">Get Accredited</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="tattoos-social"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">12</span><span class="checkmark">&#10003;</span></span>Tattoos.Social</div><div class="sub-item-description">Create your Tattoos.Social profile.</div></div><div class="sub-item-right"><a href="https://groups.tattoos.social/" target="_blank" class="platform-link">Create Account</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="connect-social"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">13</span><span class="checkmark">&#10003;</span></span>Connect Social to TattooNOW</div><div class="sub-item-description">Link all your social accounts to TattooNOW.</div></div><div class="sub-item-right"><a href="#" class="social-connect-link platform-link">Connect Social &#8594;</a><button class="mark-complete-btn">Mark Complete</button></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 6: Import Contacts -->
+                    <div class="step-content" data-step="6" style="display: none;">
+                        <div class="content-header"><div class="step-badge">STEP 6 OF 8</div><h2>Export &amp; Import Contacts</h2></div>
+                        <div class="content-body">
+                            <p style="color: #a0a0a0; text-align: center; margin-bottom: 1.5rem;">Export your contacts from existing systems and import them into TattooNOW.</p>
+                            <div class="sub-checklist">
+                                <div class="sub-item" data-item-id="upload-contacts-now"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">1</span><span class="checkmark">&#10003;</span></span>Option 1: Upload Contacts Now</div><div class="sub-item-description">If you have your contacts ready in CSV format, upload them now.</div><a href="#" class="upload-contacts-link platform-link" style="margin-top: 0.5rem; display: inline-block;">Upload Contacts &#8594;</a></div><div class="sub-item-right"><button class="mark-complete-btn">Mark Complete</button></div></div>
+                                <div class="sub-item" data-item-id="wait-for-meeting"><div class="sub-item-left"><div class="sub-item-title"><span class="sub-item-number"><span class="number-text">2</span><span class="checkmark">&#10003;</span></span>Option 2: Wait for Onboarding Meeting</div><div class="sub-item-description">Prefer to handle contact import during your onboarding call? We'll walk you through it.</div></div><div class="sub-item-right"><button class="mark-complete-btn">Mark Complete</button></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 7: Mobile App -->
+                    <div class="step-content" data-step="7" style="display: none;">
+                        <div class="content-header"><div class="step-badge">STEP 7 OF 8</div><h2>Download the Mobile App</h2></div>
+                        <div class="content-body">
+                            <p style="color: #a0a0a0; text-align: center; margin-bottom: 1.5rem;">Stay connected on the go with the Lead Connector mobile app.</p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                                <div style="background: #0a0a0a; border-radius: 12px; padding: 1.5rem; border: 1px solid #333333;">
+                                    <h3 style="color: #ffffff; margin-bottom: 1.25rem;">&#128241; Get the App</h3>
+                                    <p style="color: #a0a0a0; font-size: 0.9rem; margin-bottom: 1.25rem;">Download Lead Connector to manage conversations and respond to leads.</p>
+                                    <div style="margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem;"><span style="color: #ffffff; flex: 1;">Apple App Store</span><a href="https://apps.apple.com/us/app/lead-connector/id1564302502" target="_blank" class="platform-link">Download</a></div>
+                                    <div style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;"><span style="color: #ffffff; flex: 1;">Google Play Store</span><a href="https://play.google.com/store/apps/details?id=com.LeadConnector" target="_blank" class="platform-link">Download</a></div>
+                                    <div style="background: #1a2a3a; border-radius: 8px; padding: 1.25rem; border: 1px solid #4CAF50;"><h4 style="color: #4CAF50; margin-bottom: 0.75rem;">&#128273; Login Credentials</h4><p style="color: #ffffff; font-size: 0.85rem; margin: 0;">Use the same username and password as your business.TattooNOW.com account.</p></div>
+                                </div>
+                                <div style="background: #0a0a0a; border-radius: 12px; padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                    <h3 style="color: #ffffff; text-align: center; margin-bottom: 1.5rem;">Never miss a deal with<br>real-time notifications</h3>
+                                    <div id="appScreenshotSlideshow" style="position: relative; width: 100%; max-width: 350px;">
+                                        <div class="app-slide" style="display: block;"><img src="https://storage.googleapis.com/msgsndr/dWlb0GcHLhNYv9zAChVt/media/695ad8ba6e700e6cf15a8eb8.png" alt="App" style="width: 100%; border-radius: 8px; border: 1px solid #333333;"></div>
+                                        <div class="app-slide" style="display: none;"><img src="https://storage.googleapis.com/msgsndr/dWlb0GcHLhNYv9zAChVt/media/695ad8ba74830315523a4190.png" alt="App" style="width: 100%; border-radius: 8px; border: 1px solid #333333;"></div>
+                                        <div class="app-slide" style="display: none;"><img src="https://storage.googleapis.com/msgsndr/dWlb0GcHLhNYv9zAChVt/media/695ad8ba74830316653a418f.png" alt="App" style="width: 100%; border-radius: 8px; border: 1px solid #333333;"></div>
+                                        <div class="app-slide" style="display: none;"><img src="https://storage.googleapis.com/msgsndr/dWlb0GcHLhNYv9zAChVt/media/695ad8ba3ccdd6d8a1039d2d.png" alt="App" style="width: 100%; border-radius: 8px; border: 1px solid #333333;"></div>
+                                        <button id="prevSlide" style="position: absolute; top: 50%; left: -15px; transform: translateY(-50%); background: rgba(255, 149, 0, 0.8); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer;">&#10094;</button>
+                                        <button id="nextSlide" style="position: absolute; top: 50%; right: -15px; transform: translateY(-50%); background: rgba(255, 149, 0, 0.8); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer;">&#10095;</button>
+                                        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1.5rem;">
+                                            <span class="slide-dot" data-slide="0" style="width: 12px; height: 12px; border-radius: 50%; background: #ff9500; cursor: pointer;"></span>
+                                            <span class="slide-dot" data-slide="1" style="width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer;"></span>
+                                            <span class="slide-dot" data-slide="2" style="width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer;"></span>
+                                            <span class="slide-dot" data-slide="3" style="width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer;"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 8: Next Steps -->
+                    <div class="step-content" data-step="8" style="display: none;">
+                        <div class="content-header"><div class="step-badge">STEP 8 OF 8</div><h2>What Happens Next</h2></div>
+                        <div class="content-body">
+                            <p style="color: #a0a0a0;">Congratulations on completing your initial setup! Here's what happens next.</p>
+                            <div class="next-steps-grid">
+                                <div class="next-steps-cards">
+                                    <div class="next-step-card"><strong>Expect Emails from Gabe</strong><div>You'll receive emails from gabe@tattoonow.com with updates, questions, and next steps.</div></div>
+                                    <div class="next-step-card"><strong>Behind-the-Scenes Setup</strong><div>We will be working behind the scenes on setup before our call.</div></div>
+                                    <div class="next-step-card"><strong>Members Exclusive Content</strong><div>Once complete, you'll get access to exclusive news and resources.</div></div>
+                                </div>
+                                <div style="background: #1a1a1a; border-radius: 8px; padding: 1rem; border: 1px solid #333333;">
+                                    <h3 style="color: #ffffff; margin-bottom: 1rem;">Learn More About TattooNOW</h3>
+                                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                        <div style="background: #0a0a0a; border-radius: 6px; padding: 0.75rem; border: 1px solid #2a2a2a; display: flex; gap: 0.75rem; align-items: center;"><img src="https://i.ytimg.com/vi/hGLu1SzRIfU/mqdefault.jpg" alt="Video" style="width: 120px; height: 90px; border-radius: 4px; object-fit: cover;"><div><div style="color: #ffffff; font-weight: 600; margin-bottom: 0.35rem;">Gaining Tattoo Clients</div><a href="https://www.youtube.com/watch?v=hGLu1SzRIfU" target="_blank" class="platform-link" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Watch &#8594;</a></div></div>
+                                        <div style="background: #0a0a0a; border-radius: 6px; padding: 0.75rem; border: 1px solid #2a2a2a; display: flex; gap: 0.75rem; align-items: center;"><img src="https://i.ytimg.com/vi/BPK2oLwL3RE/mqdefault.jpg" alt="Video" style="width: 120px; height: 90px; border-radius: 4px; object-fit: cover;"><div><div style="color: #ffffff; font-weight: 600; margin-bottom: 0.35rem;">July 2025 Interview</div><a href="https://www.youtube.com/watch?v=BPK2oLwL3RE" target="_blank" class="platform-link" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Watch &#8594;</a></div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bottom-nav">
+                <button class="bottom-nav-btn btn-back" id="btnBack">&#8592; Back</button>
+                <div class="location-debug" id="locationDebug"><strong id="locationIdDisplay">Loading...</strong></div>
+                <button class="bottom-nav-btn btn-complete" id="btnComplete">Mark Complete &#10003;</button>
+                <button class="bottom-nav-btn btn-next" id="btnNext" style="display: none;">Next Step &#8594;</button>
+            </div>
+        </main>
+    </div>
+    <!-- Video Modal -->
+    <div class="modal" id="videoModal">
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose">&times;</button>
+            <div class="video-container" id="videoContainer"></div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        'use strict';
+        
+        const STORAGE_PREFIX = 'launchpad_progress_';
+        const totalSteps = 8;
+        let currentLocationId = null;
+        let completedSteps = new Set();
+        let subCheckboxState = { step4: [], step5: [], step6: [] };
+        let isInitialized = false;
+        let currentStep = 1;
+        let setupCompleted = false;
+
+        // ── Webhook notifications (n8n / HighLevel) ──────────
+        async function sendWebhook(event, data) {
+            var payload = {
+                event: event,
+                source: 'tattoonow-launchpad',
+                locationId: currentLocationId,
+                timestamp: new Date().toISOString(),
+                data: data,
+            };
+            console.log('[Launchpad Webhook]', event, payload);
+            if (!WEBHOOK_URL) return;
+            try {
+                await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+            } catch (e) {
+                console.warn('[Launchpad Webhook] Failed:', e);
+            }
+        }
+
+        // ── PostMessage API (iframe parent communication) ────
+        function notifyParent(event, data) {
+            try {
+                window.parent.postMessage({
+                    source: 'tattoonow-launchpad',
+                    event: event,
+                    locationId: currentLocationId,
+                    data: data,
+                }, '*');
+            } catch (e) { /* not in iframe */ }
+        }
+
+        // LOADING OVERLAY
+        function hideLoadingOverlay() {
+            var overlay = document.getElementById('loadingOverlay');
+            var mainContainer = document.getElementById('mainContainer');
+            if (overlay) overlay.classList.add('hidden');
+            if (mainContainer) mainContainer.classList.add('loaded');
+            console.log('[Launchpad] Content revealed');
+        }
+
+        // LOCATION DETECTION
+        function getLocationIdFromURL() {
+            var urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('location') || urlParams.get('locationId') || urlParams.get('locationID') || urlParams.get('loc');
+        }
+        
+        function initializeLocationDetection() {
+            console.log('[Launchpad] Starting...');
+            var locationId = getLocationIdFromURL();
+            
+            if (!locationId) {
+                locationId = localStorage.getItem('supportBlade_locationId');
+            }
+            
+            if (!locationId) {
+                setTimeout(function() {
+                    if (!currentLocationId) {
+                        var sessionId = sessionStorage.getItem('launchpad_session_id');
+                        if (!sessionId) {
+                            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                            sessionStorage.setItem('launchpad_session_id', sessionId);
+                        }
+                        setLocationId(sessionId);
+                    }
+                }, 2000);
+            } else {
+                setLocationId(locationId);
+            }
+        }
+        
+        function setLocationId(locationId) {
+            if (currentLocationId === locationId) return;
+            currentLocationId = locationId;
+            console.log('[Launchpad] Location:', locationId);
+            document.getElementById('locationIdDisplay').textContent = locationId;
+            loadProgress();
+        }
+        
+        function getStorageKey() {
+            return STORAGE_PREFIX + (currentLocationId || 'default');
+        }
+        
+        // SAVE PROGRESS
+        async function saveProgress() {
+            if (!currentLocationId) return;
+            
+            var data = {
+                completedSteps: Array.from(completedSteps),
+                subCheckboxState: subCheckboxState,
+                currentStep: currentStep,
+                setupCompleted: setupCompleted,
+                lastUpdated: new Date().toISOString(),
+                locationId: currentLocationId
+            };
+            
+            localStorage.setItem(getStorageKey(), JSON.stringify(data));
+            
+            if (APPS_SCRIPT_URL) {
+                try {
+                    var params = new URLSearchParams({
+                        action: 'save',
+                        locationId: currentLocationId,
+                        completedSteps: JSON.stringify(Array.from(completedSteps)),
+                        step4: JSON.stringify(subCheckboxState.step4 || []),
+                        step5: JSON.stringify(subCheckboxState.step5 || []),
+                        step6: JSON.stringify(subCheckboxState.step6 || []),
+                        currentStep: currentStep.toString(),
+                        setupCompleted: setupCompleted.toString(),
+                        secretKey: APPS_SCRIPT_SECRET
+                    });
+                    fetch(APPS_SCRIPT_URL + '?' + params.toString()).catch(function() {});
+                } catch (e) {}
+            }
+        }
+        
+        // LOAD PROGRESS
+        async function loadProgress() {
+            if (!currentLocationId) {
+                hideLoadingOverlay();
+                return;
+            }
+            
+            var data = null;
+            
+            if (APPS_SCRIPT_URL) {
+                try {
+                    var response = await fetch(APPS_SCRIPT_URL + '?action=load&locationId=' + currentLocationId + '&secretKey=' + APPS_SCRIPT_SECRET);
+                    var result = await response.json();
+                    if (result.success && result.data) data = result.data;
+                } catch (e) { console.log('[Launchpad] Sheets fetch failed, using localStorage'); }
+            }
+            
+            if (!data) {
+                var saved = localStorage.getItem(getStorageKey());
+                if (saved) {
+                    try { data = JSON.parse(saved); } catch (e) {}
+                }
+            }
+            
+            if (data) {
+                completedSteps = new Set(data.completedSteps || []);
+                subCheckboxState = data.subCheckboxState || { step4: [], step5: [], step6: [] };
+                if (subCheckboxState.step4) subCheckboxState.step4 = subCheckboxState.step4.filter(function(id) { return typeof id === 'string'; });
+                if (subCheckboxState.step5) subCheckboxState.step5 = subCheckboxState.step5.filter(function(id) { return typeof id === 'string'; });
+                if (subCheckboxState.step6) subCheckboxState.step6 = subCheckboxState.step6.filter(function(id) { return typeof id === 'string'; });
+                currentStep = data.currentStep || 1;
+                setupCompleted = data.setupCompleted || false;
+                
+                if (setupCompleted && COMPLETION_REDIRECT_URL) {
+                    console.log('[Launchpad] Setup complete, fading out then redirecting...');
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    setTimeout(function() {
+                        window.location.replace(COMPLETION_REDIRECT_URL);
+                    }, 400);
+                    return;
+                }
+            }
+            
+            if (!isInitialized) {
+                isInitialized = true;
+                initializeUI();
+            }
+            
+            applyProgressToUI();
+            updateProgress();
+            hideLoadingOverlay();
+        }
+        
+        function applyProgressToUI() {
+            completedSteps.forEach(function(step) {
+                var navItem = document.querySelector('.nav-item[data-step="' + step + '"]');
+                if (navItem) navItem.classList.add('completed');
+            });
+            
+            ['step4', 'step5', 'step6'].forEach(function(stepKey) {
+                var stepNum = stepKey.replace('step', '');
+                if (subCheckboxState[stepKey]) {
+                    subCheckboxState[stepKey].forEach(function(itemId) {
+                        var subItem = document.querySelector('[data-step="' + stepNum + '"] .sub-item[data-item-id="' + itemId + '"]');
+                        if (subItem) {
+                            subItem.classList.add('completed');
+                            var btn = subItem.querySelector('.mark-complete-btn');
+                            if (btn) { btn.textContent = 'Unmark \u2717'; btn.classList.add('completed'); }
+                        }
+                    });
+                }
+            });
+            
+            showStep(currentStep);
+        }
+        
+        function showStep(stepNumber) {
+            currentStep = stepNumber;
+            
+            document.querySelectorAll('.nav-item').forEach(function(item) { item.classList.remove('active'); });
+            var activeNavItem = document.querySelector('.nav-item[data-step="' + stepNumber + '"]');
+            if (activeNavItem) activeNavItem.classList.add('active');
+            
+            document.querySelectorAll('.step-content').forEach(function(content) { content.style.display = 'none'; });
+            var activeContent = document.querySelector('.step-content[data-step="' + stepNumber + '"]');
+            if (activeContent) activeContent.style.display = 'block';
+            
+            document.querySelector('.content-scroll-wrapper').scrollTop = 0;
+            updateButtonStates();
+            toggleStepCompletionMessages(stepNumber);
+        }
+        
+        function toggleStepCompletionMessages(stepNumber) {
+            if (stepNumber === 2) {
+                document.getElementById('step2CompletionMessage').style.display = completedSteps.has(2) ? 'block' : 'none';
+                document.getElementById('step2FormContainer').style.display = completedSteps.has(2) ? 'none' : 'block';
+            }
+            if (stepNumber === 3) {
+                document.getElementById('step3CompletionMessage').style.display = completedSteps.has(3) ? 'block' : 'none';
+                document.getElementById('step3CalendarContainer').style.display = completedSteps.has(3) ? 'none' : 'block';
+            }
+        }
+        
+        function updateButtonStates() {
+            var btnBack = document.getElementById('btnBack');
+            var btnComplete = document.getElementById('btnComplete');
+            var btnNext = document.getElementById('btnNext');
+            
+            btnBack.disabled = currentStep === 1;
+            
+            if (completedSteps.has(currentStep)) {
+                if ((currentStep === 4 && subCheckboxState.step4.length === 8) || 
+                    (currentStep === 5 && subCheckboxState.step5.length === 13) ||
+                    (currentStep === 6 && subCheckboxState.step6.length === 2)) {
+                    btnComplete.textContent = 'Continue \u2192';
+                    btnComplete.classList.remove('btn-unmark');
+                    btnNext.style.display = 'none';
+                } else {
+                    btnComplete.textContent = 'Unmark Complete \u2717';
+                    btnComplete.classList.add('btn-unmark');
+                    btnNext.style.display = currentStep < totalSteps ? 'inline-block' : 'none';
+                }
+            } else {
+                btnComplete.textContent = 'Mark Complete \u2713';
+                btnComplete.classList.remove('btn-unmark');
+                btnNext.style.display = 'none';
+            }
+        }
+        
+        function updateProgress() {
+            var percentage = (completedSteps.size / totalSteps) * 100;
+            document.getElementById('progressCircle').style.strokeDashoffset = 182 - (percentage / 100) * 182;
+            document.getElementById('progressPercentage').textContent = Math.round(percentage) + '%';
+            document.getElementById('progressSteps').textContent = completedSteps.size + ' of ' + totalSteps + ' steps';
+            
+            if (completedSteps.size === totalSteps) celebrateCompletion();
+        }
+        
+        function celebrateCompletion() {
+            var storageKey = 'launchpad_confetti_shown_' + currentLocationId;
+            
+            if (!setupCompleted) {
+                setupCompleted = true;
+                saveProgress();
+                sendWebhook('onboarding_complete', { completedSteps: Array.from(completedSteps), subCheckboxState: subCheckboxState });
+                notifyParent('onboarding_complete', { completedSteps: Array.from(completedSteps), subCheckboxState: subCheckboxState });
+            }
+            
+            if (localStorage.getItem(storageKey) && COMPLETION_REDIRECT_URL) {
+                window.location.href = COMPLETION_REDIRECT_URL;
+                return;
+            }
+            
+            localStorage.setItem(storageKey, 'true');
+            
+            var container = document.getElementById('confettiContainer');
+            var colors = ['#2D4B82', '#4CAF50', '#2196F3', '#00BCD4', '#ff9500'];
+            
+            for (var i = 0; i < 100; i++) {
+                (function(idx) {
+                    setTimeout(function() {
+                        var confetti = document.createElement('div');
+                        confetti.className = 'confetti';
+                        confetti.style.left = Math.random() * 100 + '%';
+                        confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                        confetti.style.animationDelay = Math.random() * 0.3 + 's';
+                        container.appendChild(confetti);
+                        setTimeout(function() { confetti.remove(); }, 6000);
+                    }, idx * 30);
+                })(i);
+            }
+            
+            setTimeout(function() { if (COMPLETION_REDIRECT_URL) window.location.href = COMPLETION_REDIRECT_URL; }, 4000);
+        }
+        
+        function toggleCurrentStepComplete() {
+            if (completedSteps.has(currentStep)) {
+                if (currentStep === 4 && subCheckboxState.step4.length === 8) { showStep(5); return; }
+                if (currentStep === 5 && subCheckboxState.step5.length === 13) { showStep(6); return; }
+                if (currentStep === 6 && subCheckboxState.step6.length === 2) { showStep(7); return; }
+                
+                completedSteps.delete(currentStep);
+                if (currentStep === 4) { subCheckboxState.step4 = []; resetSubItems(4); }
+                if (currentStep === 5) { subCheckboxState.step5 = []; resetSubItems(5); }
+                if (currentStep === 6) { subCheckboxState.step6 = []; resetSubItems(6); }
+                
+                document.querySelector('.nav-item[data-step="' + currentStep + '"]').classList.remove('completed');
+                updateProgress(); updateButtonStates(); toggleStepCompletionMessages(currentStep); saveProgress();
+            } else {
+                if (currentStep === 4 && subCheckboxState.step4.length < 8) { alert('Please complete all 8 items.'); return; }
+                if (currentStep === 5 && subCheckboxState.step5.length < 13) { alert('Please complete all 13 items.'); return; }
+                if (currentStep === 6 && subCheckboxState.step6.length < 2) { alert('Please complete at least one option.'); return; }
+                
+                completedSteps.add(currentStep);
+                document.querySelector('.nav-item[data-step="' + currentStep + '"]').classList.add('completed');
+                updateProgress(); updateButtonStates(); toggleStepCompletionMessages(currentStep); saveProgress();
+                sendWebhook('step_completed', { step: currentStep, completedSteps: Array.from(completedSteps) });
+                notifyParent('step_completed', { step: currentStep, completedSteps: Array.from(completedSteps) });
+                if (currentStep < totalSteps) showStep(currentStep + 1);
+            }
+        }
+        
+        function resetSubItems(step) {
+            document.querySelectorAll('[data-step="' + step + '"] .sub-item').forEach(function(item) {
+                item.classList.remove('completed');
+                var btn = item.querySelector('.mark-complete-btn');
+                if (btn) { btn.textContent = 'Mark Complete'; btn.classList.remove('completed'); }
+            });
+        }
+        
+        function checkStepCompletion(step) {
+            var requiredCounts = { 4: 8, 5: 13, 6: 2 };
+            var stepKey = 'step' + step;
+            var required = requiredCounts[step];
+            
+            if (required && subCheckboxState[stepKey].length === required && !completedSteps.has(step)) {
+                completedSteps.add(step);
+                document.querySelector('.nav-item[data-step="' + step + '"]').classList.add('completed');
+                updateProgress(); updateButtonStates(); saveProgress();
+                sendWebhook('step_completed', { step: step, completedSteps: Array.from(completedSteps) });
+                notifyParent('step_completed', { step: step, completedSteps: Array.from(completedSteps) });
+                setTimeout(function() { showStep(step + 1); }, 500);
+            }
+        }
+        
+        function showSkipModal() {
+            document.getElementById('skipModal').classList.add('active');
+        }
+        
+        function hideSkipModal() {
+            document.getElementById('skipModal').classList.remove('active');
+        }
+        
+        function executeSkipAll() {
+            for (var i = 1; i <= totalSteps; i++) completedSteps.add(i);
+            subCheckboxState.step4 = ['domain-name', 'professional-email', 'google-business', 'local-service-ads', 'google-search-console', 'google-analytics', 'google-ads', 'connect-accounts'];
+            subCheckboxState.step5 = ['youtube', 'instagram', 'facebook', 'tiktok', 'pinterest', 'threads', 'bluesky', 'yelp', 'linkedin', 'duns', 'bbb', 'tattoos-social', 'connect-social'];
+            subCheckboxState.step6 = ['upload-contacts-now', 'wait-for-meeting'];
+            setupCompleted = true;
+            saveProgress();
+            sendWebhook('setup_skipped', { locationId: currentLocationId });
+            notifyParent('setup_skipped', { locationId: currentLocationId });
+            localStorage.setItem('launchpad_confetti_shown_' + currentLocationId, 'true');
+            hideSkipModal();
+            setTimeout(function() { if (COMPLETION_REDIRECT_URL) window.location.href = COMPLETION_REDIRECT_URL; }, 500);
+        }
+        function initializeUI() {
+            // Survey button
+            document.getElementById('surveyButton').addEventListener('click', function() {
+                window.open('https://links.tattoonow.com/widget/survey/iciayX2aDCN3H0x5p8A4?update_-_locationid=' + currentLocationId, 'surveyWindow', 'width=800,height=900,scrollbars=yes');
+            });
+            
+            // Calendar button
+            document.getElementById('calendarButton').addEventListener('click', function() {
+                window.open('https://links.tattoonow.com/widget/booking/OJd5PHlAGUXVp4nymHUx', 'calendarWindow', 'width=800,height=900,scrollbars=yes');
+            });
+            
+            // Welcome video
+            if (VIDEO_CONFIG.welcomeVideo.video) {
+                document.getElementById('welcomeVideoEmbed').src = 'https://www.youtube.com/embed/' + VIDEO_CONFIG.welcomeVideo.video;
+            }
+            
+            // Skip setup
+            document.getElementById('skipSetupBtn').addEventListener('click', showSkipModal);
+            document.getElementById('skipModalContinue').addEventListener('click', hideSkipModal);
+            document.getElementById('skipModalCancel').addEventListener('click', hideSkipModal);
+            document.getElementById('skipModalConfirm').addEventListener('click', executeSkipAll);
+            document.getElementById('skipModal').addEventListener('click', function(e) {
+                if (e.target === this) hideSkipModal();
+            });
+            
+            // Sub-item buttons
+            document.querySelectorAll('.mark-complete-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var subItem = this.closest('.sub-item');
+                    var itemId = subItem.getAttribute('data-item-id');
+                    var step = parseInt(document.querySelector('.step-content:not([style*="display: none"])').getAttribute('data-step'));
+                    var stepKey = 'step' + step;
+                    
+                    if (subItem.classList.contains('completed')) {
+                        subItem.classList.remove('completed');
+                        this.textContent = 'Mark Complete';
+                        this.classList.remove('completed');
+                        subCheckboxState[stepKey] = subCheckboxState[stepKey].filter(function(id) { return id !== itemId; });
+                    } else {
+                        subItem.classList.add('completed');
+                        this.textContent = 'Unmark \u2717';
+                        this.classList.add('completed');
+                        if (!subCheckboxState[stepKey].includes(itemId)) subCheckboxState[stepKey].push(itemId);
+                    }
+                    
+                    checkStepCompletion(step);
+                    saveProgress();
+                });
+            });
+            
+            // Navigation
+            document.querySelectorAll('.nav-item').forEach(function(item) {
+                item.addEventListener('click', function() { showStep(parseInt(item.dataset.step)); });
+            });
+            
+            document.getElementById('btnBack').addEventListener('click', function() { if (currentStep > 1) { showStep(currentStep - 1); saveProgress(); } });
+            document.getElementById('btnComplete').addEventListener('click', toggleCurrentStepComplete);
+            document.getElementById('btnNext').addEventListener('click', function() { if (currentStep < totalSteps) { showStep(currentStep + 1); saveProgress(); } });
+            
+            // Video modal
+            var modal = document.getElementById('videoModal');
+            var videoContainer = document.getElementById('videoContainer');
+            
+            document.querySelectorAll('.mini-video-trigger[data-video-key]').forEach(function(trigger) {
+                var videoId = VIDEO_CONFIG[trigger.dataset.videoKey] ? VIDEO_CONFIG[trigger.dataset.videoKey].video : '';
+                if (!videoId) { trigger.style.display = 'none'; return; }
+                trigger.addEventListener('click', function() {
+                    videoContainer.innerHTML = '<iframe src="https://www.youtube.com/embed/' + videoId + '" frameborder="0" allowfullscreen></iframe>';
+                    modal.classList.add('active');
+                });
+            });
+            
+            document.getElementById('modalClose').addEventListener('click', function() { modal.classList.remove('active'); videoContainer.innerHTML = ''; });
+            modal.addEventListener('click', function(e) { if (e.target === modal) { modal.classList.remove('active'); videoContainer.innerHTML = ''; } });
+            
+            // Slideshow
+            var slideIndex = 0;
+            var slides = document.querySelectorAll('.app-slide');
+            var dots = document.querySelectorAll('.slide-dot');
+            
+            function showSlide(i) {
+                slideIndex = (i + slides.length) % slides.length;
+                slides.forEach(function(s) { s.style.display = 'none'; });
+                slides[slideIndex].style.display = 'block';
+                dots.forEach(function(d, j) { d.style.background = j === slideIndex ? '#ff9500' : 'rgba(255,255,255,0.3)'; });
+            }
+            
+            var interval = setInterval(function() { showSlide(slideIndex + 1); }, 3000);
+            document.getElementById('prevSlide').addEventListener('click', function() { clearInterval(interval); showSlide(slideIndex - 1); interval = setInterval(function() { showSlide(slideIndex + 1); }, 3000); });
+            document.getElementById('nextSlide').addEventListener('click', function() { clearInterval(interval); showSlide(slideIndex + 1); interval = setInterval(function() { showSlide(slideIndex + 1); }, 3000); });
+            dots.forEach(function(dot) { dot.addEventListener('click', function() { clearInterval(interval); showSlide(parseInt(dot.dataset.slide)); interval = setInterval(function() { showSlide(slideIndex + 1); }, 3000); }); });
+            
+            // Dynamic links
+            var base = 'https://business.tattoonow.com/v2/location/' + currentLocationId;
+            document.querySelectorAll('.domain-connect-link').forEach(function(l) { l.href = base + '/settings/domain'; l.target = '_blank'; });
+            document.querySelectorAll('.accounts-connect-link').forEach(function(l) { l.href = base + '/settings/integrations/list'; l.target = '_blank'; });
+            document.querySelectorAll('.social-connect-link').forEach(function(l) { l.href = base + '/marketing/social-planner/settings?tab=all'; l.target = '_blank'; });
+            document.querySelectorAll('.upload-contacts-link').forEach(function(l) { l.href = base + '/contacts/import'; l.target = '_blank'; });
+            
+            showStep(currentStep);
+            updateProgress();
+        }
+        
+        // Message listener for survey/calendar completion
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.action === 'surveyCompleted' && !completedSteps.has(2)) {
+                completedSteps.add(2);
+                document.querySelector('.nav-item[data-step="2"]').classList.add('completed');
+                updateProgress(); updateButtonStates(); toggleStepCompletionMessages(2); saveProgress();
+                sendWebhook('step_completed', { step: 2, completedSteps: Array.from(completedSteps) });
+                notifyParent('step_completed', { step: 2, completedSteps: Array.from(completedSteps) });
+            }
+            if (event.data && event.data.action === 'calendarBooked' && !completedSteps.has(3)) {
+                completedSteps.add(3);
+                document.querySelector('.nav-item[data-step="3"]').classList.add('completed');
+                updateProgress(); updateButtonStates(); toggleStepCompletionMessages(3); saveProgress();
+                sendWebhook('step_completed', { step: 3, completedSteps: Array.from(completedSteps) });
+                notifyParent('step_completed', { step: 3, completedSteps: Array.from(completedSteps) });
+            }
+        });
+        
+        // Start
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeLocationDetection);
+        } else {
+            initializeLocationDetection();
+        }
+        
+        window.LaunchpadDebug = {
+            getProgress: function() { return { completedSteps: Array.from(completedSteps), subCheckboxState: subCheckboxState, currentStep: currentStep, setupCompleted: setupCompleted }; },
+            reset: function() { localStorage.removeItem(getStorageKey()); location.reload(); }
+        };
+    })();
+    </script>
+</body>
+</html>
