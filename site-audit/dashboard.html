@@ -81,16 +81,20 @@
     /* ── Component: Run Audit Button ─────────────────────── */
     const AUDIT_WEBHOOK = 'https://tn.reinventingai.com/webhook/run-audit';
 
-    function RunAuditButton({ locationId, lastAuditDate }) {
+    function RunAuditButton({ locationId, lastAuditDate, showForm, defaults }) {
       const [status, setStatus] = React.useState('idle'); // idle | running | done | error
+      const [domain, setDomain] = React.useState(defaults?.website || '');
+      const [address, setAddress] = React.useState(defaults?.address || '');
+      const [phone, setPhone] = React.useState(defaults?.phone || '');
 
       const runAudit = async () => {
+        if (!domain) return;
         setStatus('running');
         try {
           const res = await fetch(AUDIT_WEBHOOK, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locationId })
+            body: JSON.stringify({ locationId, domain, address, phone })
           });
           const data = await res.json();
           if (data.success) {
@@ -111,32 +115,50 @@
         done: { background:'#4ade80', color:'#000', cursor:'default', border:'none' },
         error: { background:'#f87171', color:'#000', cursor:'pointer', border:'none' },
       };
-      const btnText = { idle:'Run New Audit', running:'Running...', done:'Done — Reloading...', error:'Failed — Retry?' };
+      const btnText = { idle: showForm ? 'Request Your Free Audit' : 'Run Audit', running:'Running...', done:'Done \u2014 Reloading...', error:'Failed \u2014 Retry?' };
+      const inputStyle = { background:'#111', color:'#fafafa', border:'1px solid #333', padding:'0.5rem 0.75rem', borderRadius:'4px', width:'100%', fontSize:'0.9rem', fontFamily:'Roboto, sans-serif', boxSizing:'border-box' };
 
       return (
         <section className="card" style={{marginBottom:'2rem', border:'1px solid #333', textAlign:'center', padding:'2rem'}}>
-          <h3 style={{marginTop:0, color:'#888'}}>Refresh Audit Data</h3>
+          <h3 style={{marginTop:0, color:'#888'}}>{showForm ? 'Run Your First Audit' : 'Refresh Audit Data'}</h3>
+          {showForm && (
+            <div style={{maxWidth:'400px', margin:'0 auto 1.5rem', textAlign:'left', display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+              <div>
+                <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Website</label>
+                <input value={domain} onChange={e => setDomain(e.target.value)} placeholder="example.com" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Address</label>
+                <input value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St, City, ST 00000" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{fontSize:'0.75rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Phone</label>
+                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" style={inputStyle} />
+              </div>
+            </div>
+          )}
           <button
+            type="button"
             onClick={status !== 'running' && status !== 'done' ? runAudit : undefined}
-            disabled={status === 'running' || status === 'done'}
+            disabled={status === 'running' || status === 'done' || (!domain && showForm)}
             style={{
               padding:'0.75rem 2rem',
               fontFamily:'Roboto Slab, serif', fontWeight:700, fontSize:'1rem',
               borderRadius:'6px', transition:'background 0.2s',
-              ...btnStyles[status]
+              ...((!domain && showForm) ? { background:'#333', color:'#666', cursor:'not-allowed', border:'1px solid #444' } : btnStyles[status])
             }}
           >
             {btnText[status]}
           </button>
           <p style={{color:'#555', fontSize:'0.8rem', marginTop:'0.75rem', marginBottom:0}}>
-            Auto-runs every Sunday at 3am &bull; Last run: {lastAuditDate || '\u2014'}
+            {lastAuditDate ? `Auto-runs every Sunday at 3am \u2022 Last run: ${lastAuditDate}` : 'Takes about 30 seconds'}
           </p>
         </section>
       );
     }
 
     /* ── Tab: Overview ───────────────────────────────────── */
-    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, lastAuditDate, locationId }) {
+    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, lastAuditDate, locationId, siteDomain }) {
       const seo = scores.seo?.score ?? '\u2014';
       const ai = scores.ai_discoverability?.score ?? '\u2014';
       const geo = scores.geo_readiness?.score ?? '\u2014';
@@ -272,7 +294,7 @@
           </section>
 
           {/* Run Audit / Refresh Data */}
-          <RunAuditButton locationId={locationId} lastAuditDate={lastAuditDate} />
+          <RunAuditButton locationId={locationId} lastAuditDate={lastAuditDate} defaults={{website: siteDomain}} />
         </div>
       );
     }
@@ -679,6 +701,11 @@
     function App() {
       const params = new URLSearchParams(window.location.search);
       const locationId = params.get('locationId');
+      const urlDefaults = {
+        website: params.get('website') || '',
+        address: params.get('address') || '',
+        phone: params.get('phone') || '',
+      };
 
       const [loading, setLoading] = React.useState(true);
       const [error, setError] = React.useState(null);
@@ -753,7 +780,7 @@
             <p style={{color:'#888', fontSize:'1.1rem', margin:'0 0 2rem 0'}}>
               {site ? site.business_name : 'Your business'} doesn't have an audit report yet.
             </p>
-            <RunAuditButton locationId={locationId} lastAuditDate={null} />
+            <RunAuditButton locationId={locationId} lastAuditDate={null} showForm={true} defaults={urlDefaults} />
             <p style={{color:'#555', fontSize:'0.85rem', marginTop:'1.5rem'}}>
               We'll analyze your site across SEO, AI discoverability, GEO signals, directory listings, and more.
             </p>
@@ -816,7 +843,7 @@
             ))}
           </nav>
 
-          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} lastAuditDate={latest.audit_date} locationId={locationId} />}
+          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} lastAuditDate={latest.audit_date} locationId={locationId} siteDomain={site.domain} />}
           {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} />}
           {activeTab === 'core30' && <Core30Tab core30={core30} contentBriefs={contentBriefs} />}
           {activeTab === 'findings' && <FindingsTab latestFindings={latestFindings} />}
