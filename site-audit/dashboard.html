@@ -701,9 +701,16 @@
     function App() {
       const params = new URLSearchParams(window.location.search);
       const locationId = params.get('locationId');
+      // GHL merge fields: address, city, state, postalCode are separate fields
+      // Build full address from parts: {{location.address}}, {{location.city}}, {{location.state}} {{location.postalCode}}
+      const addrParts = [
+        params.get('address'),
+        [params.get('city'), params.get('state')].filter(Boolean).join(', '),
+        params.get('postalCode')
+      ].filter(Boolean).join(', ');
       const urlDefaults = {
         website: params.get('website') || '',
-        address: params.get('address') || '',
+        address: addrParts,
         phone: params.get('phone') || '',
       };
 
