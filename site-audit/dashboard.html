@@ -97,9 +97,10 @@
             body: JSON.stringify({ locationId, domain, address, phone })
           });
           const data = await res.json();
-          if (data.success) {
+          if (data.success || res.ok) {
             setStatus('done');
-            setTimeout(() => window.location.reload(), 2000);
+            // Audit runs in background ~15-30s, reload after delay
+            setTimeout(() => window.location.reload(), 20000);
           } else {
             setStatus('error');
           }
@@ -115,7 +116,7 @@
         done: { background:'#4ade80', color:'#000', cursor:'default', border:'none' },
         error: { background:'#f87171', color:'#000', cursor:'pointer', border:'none' },
       };
-      const btnText = { idle: showForm ? 'Request Your Free Audit' : 'Run Audit', running:'Running...', done:'Done \u2014 Reloading...', error:'Failed \u2014 Retry?' };
+      const btnText = { idle: showForm ? 'Request Your Free Audit' : 'Run Audit', running:'Running...', done:'Audit Started \u2014 Reloading in ~20s...', error:'Failed \u2014 Retry?' };
       const inputStyle = { background:'#111', color:'#fafafa', border:'1px solid #333', padding:'0.5rem 0.75rem', borderRadius:'4px', width:'100%', fontSize:'0.9rem', fontFamily:'Roboto, sans-serif', boxSizing:'border-box' };
 
       return (
