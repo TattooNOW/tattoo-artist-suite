@@ -87,22 +87,18 @@
       const [address, setAddress] = React.useState(defaults?.address || '');
       const [phone, setPhone] = React.useState(defaults?.phone || '');
 
-      const runAudit = async () => {
+      const runAudit = () => {
         if (!domain) return;
         setStatus('running');
+        // Fire webhook in background — don't block the UI transition
+        fetch(AUDIT_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locationId, domain, address, phone })
+        }).then(res => console.log('Webhook response:', res.status, res.ok))
+          .catch(e => console.error('Audit trigger failed:', e));
+        // Immediately transition to processing screen
         if (onAuditStarted) onAuditStarted();
-        try {
-          const res = await fetch(AUDIT_WEBHOOK, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locationId, domain, address, phone })
-          });
-          console.log('Webhook response:', res.status, res.ok);
-          setStatus('done');
-        } catch (e) {
-          console.error('Audit trigger failed:', e);
-          setStatus('done');
-        }
       };
 
       const inputStyle = { background:'#111', color:'#fafafa', border:'1px solid #333', padding:'0.5rem 0.75rem', borderRadius:'4px', width:'100%', fontSize:'0.9rem', fontFamily:'Roboto, sans-serif', boxSizing:'border-box' };
