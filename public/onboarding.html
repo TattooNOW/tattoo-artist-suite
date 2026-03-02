@@ -209,7 +209,8 @@
   .tnow-onboarding .benefit-card .drag-handle {
     color: var(--tnow-muted);
     font-size: 1.1rem;
-    display: none;
+    display: flex;
+    align-items: center;
     cursor: grab;
     flex-shrink: 0;
     padding: 0.25rem;
@@ -217,10 +218,6 @@
   }
   .tnow-onboarding .benefit-card .drag-handle:active {
     cursor: grabbing;
-  }
-  .tnow-onboarding .benefit-card.selected .drag-handle {
-    display: flex;
-    align-items: center;
   }
   .tnow-onboarding .benefit-card-row {
     display: flex;
@@ -245,14 +242,11 @@
     background: transparent;
     color: var(--tnow-muted);
     cursor: pointer;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     font-size: 0.85rem;
     transition: all 0.2s ease;
-  }
-  .tnow-onboarding .benefit-card.selected .benefit-action-btn {
-    display: flex;
   }
   .tnow-onboarding .benefit-action-btn:hover {
     border-color: var(--tnow-accent);
@@ -282,7 +276,7 @@
     font-size: 0.85rem;
   }
   .tnow-onboarding .benefit-priority-label {
-    display: none;
+    display: inline-block;
     padding: 0.15rem 0.5rem;
     border-radius: 99px;
     font-size: 0.62rem;
@@ -290,9 +284,6 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     flex-shrink: 0;
-  }
-  .tnow-onboarding .benefit-card.selected .benefit-priority-label {
-    display: inline-block;
   }
   .tnow-onboarding .benefit-priority-label.priority-high {
     background: hsl(0, 72%, 51% / 0.15);
@@ -1055,17 +1046,25 @@
     var grid = document.getElementById('benefitGrid');
     grid.innerHTML = '';
 
+    // Ensure all non-archived benefits are in selectedBenefits (preserving order)
     BENEFITS.forEach(function(b) {
-      if (archivedBenefits[b.id]) return; // skip archived
+      if (!archivedBenefits[b.id] && selectedBenefits.indexOf(b.id) === -1) {
+        selectedBenefits.push(b.id);
+      }
+    });
+
+    // Render in selectedBenefits order (drag order = priority order)
+    selectedBenefits.forEach(function(benefitId) {
+      var b = BENEFITS.find(function(x) { return x.id === benefitId; });
+      if (!b || archivedBenefits[b.id]) return;
 
       var idx = selectedBenefits.indexOf(b.id);
-      var isSelected = idx !== -1;
-      var pri = isSelected ? getPriorityInfo(idx) : null;
+      var pri = getPriorityInfo(idx);
 
       var card = document.createElement('div');
-      card.className = 'benefit-card' + (isSelected ? ' selected' : '');
+      card.className = 'benefit-card selected';
       card.setAttribute('data-benefit-id', b.id);
-      if (isSelected) card.setAttribute('draggable', 'true');
+      card.setAttribute('draggable', 'true');
 
       // Build tools HTML
       var toolsHtml = '<div class="benefit-tools">';
@@ -1076,9 +1075,7 @@
       toolsHtml += '</div>';
 
       // Priority label
-      var priLabel = isSelected
-        ? '<span class="benefit-priority-label ' + pri.cls + '">' + pri.label + '</span>'
-        : '<span class="benefit-priority-label"></span>';
+      var priLabel = '<span class="benefit-priority-label ' + pri.cls + '">' + pri.label + '</span>';
 
       // Star / Archive button states
       var isStarred = !!starredBenefits[b.id];
@@ -1103,15 +1100,7 @@
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 8-2-3H5L3 8"/><rect x="3" y="8" width="18" height="13" rx="1"/><path d="M10 12h4"/></svg>' +
             '</button>' +
           '</div>' +
-          '<div class="badge">' + (isSelected ? idx + 1 : '') + '</div>' +
         '</div>';
-
-      // Click to select/deselect (ignore action buttons and drag handle)
-      card.onclick = function(e) {
-        if (e.target.closest('.drag-handle')) return;
-        if (e.target.closest('.benefit-action-btn')) return;
-        toggleBenefit(b.id);
-      };
 
       // Star button
       card.querySelector('[data-action="star"]').onclick = function(e) {
@@ -1151,7 +1140,7 @@
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         var targetId = card.getAttribute('data-benefit-id');
-        if (dragSourceId && selectedBenefits.indexOf(targetId) !== -1 && targetId !== dragSourceId) {
+        if (dragSourceId && targetId !== dragSourceId) {
           card.classList.add('drag-over');
         }
       });
