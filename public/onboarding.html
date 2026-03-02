@@ -876,13 +876,15 @@ function confirmPriorities() {
   goToScreen(2);
 
   // Fire webhook for priority selection
-  sendWebhook('priorities_selected', {
+  const priorityData = {
     priorities: selectedBenefits,
     priorityDetails: selectedBenefits.map(id => {
       const b = BENEFITS.find(x => x.id === id);
       return { id: b.id, title: b.title, tools: b.tools };
     }),
-  });
+  };
+  sendWebhook('priorities_selected', priorityData);
+  notifyParent('priorities_selected', priorityData);
 }
 
 // ── Render: Task List ───────────────────────────────────────
@@ -945,13 +947,15 @@ function toggleTask(taskId, event) {
     // Fire webhook for task completion
     const allTasks = selectedBenefits.flatMap(bId => (BENEFITS.find(b => b.id === bId) || {}).tasks || []);
     const task = allTasks.find(t => t.id === taskId);
-    sendWebhook('task_completed', {
+    const taskData = {
       taskId,
       taskName: task ? task.name : taskId,
       tool: task ? task.tool : '',
       completedCount: Object.keys(completedTasks).length,
       totalCount: allTasks.length,
-    });
+    };
+    sendWebhook('task_completed', taskData);
+    notifyParent('task_completed', taskData);
   }
   saveState();
   renderTaskList();
@@ -1044,6 +1048,7 @@ function submitOnboarding() {
   };
 
   sendWebhook('onboarding_complete', payload);
+  notifyParent('onboarding_complete', payload);
   showToast('Onboarding submitted! Your TattooNOW specialist will be in touch soon.');
 }
 
