@@ -809,6 +809,10 @@
     screens: ['screen-welcome', 'screen-priorities', 'screen-tasks', 'screen-complete'],
   };
 
+  // ── Google Sheets Persistence (same Apps Script as launchpad) ──
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNjZ1kzDqvqCyi45CKgSljCVE5jGbW1Za1iInIXDo6uJvB5b9n7OP6sjV-O1Nu7MjL/exec';
+  var APPS_SCRIPT_SECRET = 'tattoonow_onboarding_2024';
+
   // ── URL Parameters ──────────────────────────────────────────
   var params = new URLSearchParams(window.location.search);
   var LOCATION_ID  = params.get('locationId') || params.get('location_id') || '';
@@ -960,37 +964,87 @@
 
   var STORAGE_KEY = 'tattoonow_onboarding_' + (LOCATION_ID || 'default');
 
-  function loadState() {
-    try {
-      var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (saved) {
-        if (saved.selectedBenefits) selectedBenefits = saved.selectedBenefits;
-        if (saved.completedTasks) completedTasks = saved.completedTasks;
-        if (saved.starredBenefits) starredBenefits = saved.starredBenefits;
-        if (saved.archivedBenefits) archivedBenefits = saved.archivedBenefits;
-        if (saved.contactName) document.getElementById('contactName').value = saved.contactName;
-        if (saved.businessName) document.getElementById('businessName').value = saved.businessName;
-        if (saved.contactEmail) document.getElementById('contactEmail').value = saved.contactEmail;
-        if (saved.contactPhone) document.getElementById('contactPhone').value = saved.contactPhone;
-        if (saved.currentScreen !== undefined) currentScreen = saved.currentScreen;
-      }
-    } catch (e) { /* ignore */ }
+  function applyStateData(data) {
+    if (!data) return;
+    if (data.selectedBenefits) selectedBenefits = data.selectedBenefits;
+    if (data.completedTasks) completedTasks = data.completedTasks;
+    if (data.starredBenefits) starredBenefits = data.starredBenefits;
+    if (data.archivedBenefits) archivedBenefits = data.archivedBenefits;
+    if (data.contactName) document.getElementById('contactName').value = data.contactName;
+    if (data.businessName) document.getElementById('businessName').value = data.businessName;
+    if (data.contactEmail) document.getElementById('contactEmail').value = data.contactEmail;
+    if (data.contactPhone) document.getElementById('contactPhone').value = data.contactPhone;
+    if (data.currentScreen !== undefined) currentScreen = data.currentScreen;
   }
 
+  function getStateData() {
+    return {
+      selectedBenefits: selectedBenefits,
+      completedTasks: completedTasks,
+      starredBenefits: starredBenefits,
+      archivedBenefits: archivedBenefits,
+      contactName: document.getElementById('contactName').value,
+      businessName: document.getElementById('businessName').value,
+      contactEmail: document.getElementById('contactEmail').value,
+      contactPhone: document.getElementById('contactPhone').value,
+      currentScreen: currentScreen,
+      lastUpdated: new Date().toISOString(),
+      locationId: LOCATION_ID,
+    };
+  }
+
+  // Load: try Google Sheets first, fall back to localStorage
+  async function loadState() {
+    var data = null;
+
+    if (APPS_SCRIPT_URL && LOCATION_ID) {
+      try {
+        var resp = await fetch(APPS_SCRIPT_URL + '?action=load&locationId=' + encodeURIComponent(LOCATION_ID) + '&page=priorities&secretKey=' + APPS_SCRIPT_SECRET);
+        var result = await resp.json();
+        if (result.success && result.data) data = result.data;
+      } catch (e) {
+        console.log('[TattooNOW Priorities] Sheets fetch failed, using localStorage');
+      }
+    }
+
+    if (!data) {
+      try {
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) data = JSON.parse(saved);
+      } catch (e) { /* ignore */ }
+    }
+
+    applyStateData(data);
+  }
+
+  // Save: write to localStorage + fire-and-forget to Google Sheets
   function saveState() {
+    var data = getStateData();
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        selectedBenefits: selectedBenefits,
-        completedTasks: completedTasks,
-        starredBenefits: starredBenefits,
-        archivedBenefits: archivedBenefits,
-        contactName: document.getElementById('contactName').value,
-        businessName: document.getElementById('businessName').value,
-        contactEmail: document.getElementById('contactEmail').value,
-        contactPhone: document.getElementById('contactPhone').value,
-        currentScreen: currentScreen,
-      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) { /* ignore */ }
+
+    if (APPS_SCRIPT_URL && LOCATION_ID) {
+      try {
+        var sheetParams = new URLSearchParams({
+          action: 'save',
+          page: 'priorities',
+          locationId: LOCATION_ID,
+          selectedBenefits: JSON.stringify(data.selectedBenefits),
+          completedTasks: JSON.stringify(data.completedTasks),
+          starredBenefits: JSON.stringify(data.starredBenefits),
+          archivedBenefits: JSON.stringify(data.archivedBenefits),
+          currentScreen: data.currentScreen.toString(),
+          contactName: data.contactName,
+          businessName: data.businessName,
+          contactEmail: data.contactEmail,
+          contactPhone: data.contactPhone,
+          secretKey: APPS_SCRIPT_SECRET,
+        });
+        fetch(APPS_SCRIPT_URL + '?' + sheetParams.toString()).catch(function() {});
+      } catch (e) { /* ignore */ }
+    }
   }
 
   // ── Render: Tab Bar ─────────────────────────────────────────
@@ -1425,15 +1479,17 @@
   window.tnowSubmitOnboarding = submitOnboarding;
 
   // ── Initialize ──────────────────────────────────────────────
-  loadState();
-  renderTabBar();
-  renderBenefitGrid();
-  if (selectedBenefits.length > 0) {
-    renderTaskList();
-  }
-  if (currentScreen > 0) {
-    goToScreen(currentScreen);
-  }
+  (async function init() {
+    await loadState();
+    renderTabBar();
+    renderBenefitGrid();
+    if (selectedBenefits.length > 0) {
+      renderTaskList();
+    }
+    if (currentScreen > 0) {
+      goToScreen(currentScreen);
+    }
+  })();
 
 })();
 </script>
