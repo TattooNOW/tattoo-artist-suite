@@ -163,14 +163,18 @@
       const [dots, setDots] = React.useState('');
       const [elapsed, setElapsed] = React.useState(0);
       const [found, setFound] = React.useState(false);
+      const [liveStep, setLiveStep] = React.useState('starting');
+      const [livePct, setLivePct] = React.useState(5);
+      const [liveMsg, setLiveMsg] = React.useState('Starting audit...');
 
       const steps = [
-        { label: 'Crawling your website', time: 5 },
-        { label: 'Analyzing HTML & content', time: 12 },
-        { label: 'Scoring SEO signals', time: 18 },
-        { label: 'Checking AI discoverability', time: 22 },
-        { label: 'Evaluating GEO readiness', time: 26 },
-        { label: 'Generating your report', time: 30 },
+        { key: 'starting',     label: 'Starting audit',              pct: 10 },
+        { key: 'site_located', label: 'Site located',                pct: 20 },
+        { key: 'crawling',     label: 'Crawling your website',       pct: 35 },
+        { key: 'analyzing',    label: 'Analyzing HTML & content',    pct: 50 },
+        { key: 'scoring',      label: 'Scoring SEO, AI & GEO signals', pct: 65 },
+        { key: 'writing',      label: 'Writing audit report',        pct: 80 },
+        { key: 'complete',     label: 'Audit complete!',             pct: 100 },
       ];
 
       // Animate dots
@@ -185,9 +189,37 @@
         return () => clearInterval(iv);
       }, []);
 
-      // Poll Supabase for audit results every 5 seconds
+      // Subscribe to Supabase Realtime for progress updates from n8n
       React.useEffect(() => {
         if (!locationId) return;
+
+        const channel = db.channel('audit-progress-' + locationId)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'audit_progress',
+            filter: 'location_id=eq.' + locationId,
+          }, (payload) => {
+            const row = payload.new;
+            console.log('Progress update:', row);
+            setLiveStep(row.step);
+            setLivePct(row.pct);
+            setLiveMsg(row.message || row.step);
+            if (row.step === 'complete') {
+              setFound(true);
+              setTimeout(() => window.location.reload(), 2000);
+            }
+          })
+          .subscribe((status) => {
+            console.log('Realtime subscription:', status);
+          });
+
+        return () => { db.removeChannel(channel); };
+      }, [locationId]);
+
+      // Fallback: poll Supabase for audit results every 8 seconds in case Realtime misses
+      React.useEffect(() => {
+        if (!locationId || found) return;
         let canceled = false;
 
         const poll = async () => {
@@ -198,25 +230,26 @@
             if (canceled) return;
             if (audits && audits.length > 0) {
               setFound(true);
-              setTimeout(() => window.location.reload(), 1500);
+              setLiveStep('complete');
+              setLivePct(100);
+              setLiveMsg('Audit complete!');
+              setTimeout(() => window.location.reload(), 2000);
             }
-          } catch (e) {
-            console.error('Poll error:', e);
-          }
+          } catch (e) { console.error('Poll error:', e); }
         };
 
-        // Start polling after 8 seconds, then every 5 seconds
         let pollIv = null;
         const start = setTimeout(() => {
           poll();
-          pollIv = setInterval(poll, 5000);
-        }, 8000);
+          pollIv = setInterval(poll, 8000);
+        }, 15000);
 
         return () => { canceled = true; clearTimeout(start); if (pollIv) clearInterval(pollIv); };
-      }, [locationId]);
+      }, [locationId, found]);
 
-      const currentStep = steps.reduce((acc, s) => elapsed >= s.time ? s : acc, steps[0]);
-      const progress = Math.min((elapsed / 35) * 100, found ? 100 : 95);
+      // Derive step statuses from live data
+      const currentStepIdx = steps.findIndex(s => s.key === liveStep);
+      const progress = found ? 100 : livePct;
 
       return (
         <div className="container" style={{textAlign:'center', paddingTop:'4rem', maxWidth:'600px'}}>
@@ -245,7 +278,7 @@
           </h1>
 
           <p style={{color:'#EA9320', fontSize:'1.2rem', fontWeight:500, margin:'0 0 2rem 0', minHeight:'1.5em'}}>
-            {found ? 'Loading your report...' : currentStep.label + dots}
+            {found ? 'Loading your report...' : liveMsg + dots}
           </p>
 
           {/* Progress bar */}
@@ -258,23 +291,23 @@
               }} />
             </div>
             <p style={{color:'#666', fontSize:'0.8rem', marginTop:'0.5rem'}}>
-              {found ? 'Done!' : `${Math.round(progress)}% \u2022 ${elapsed}s elapsed`}
+              {found ? 'Done!' : `${progress}% \u2022 ${elapsed}s elapsed`}
             </p>
           </div>
 
-          {/* Step checklist */}
+          {/* Step checklist — driven by live n8n progress */}
           <div style={{textAlign:'left', maxWidth:'350px', margin:'0 auto'}}>
             {steps.map((s, i) => {
-              const done = elapsed >= s.time;
-              const active = currentStep === s && !done;
+              const done = i < currentStepIdx || found;
+              const active = i === currentStepIdx && !found;
               return (
-                <div key={i} style={{
+                <div key={s.key} style={{
                   display:'flex', alignItems:'center', gap:'0.75rem',
                   padding:'0.4rem 0', color: done ? '#4ade80' : active ? '#EA9320' : '#555',
-                  fontSize:'0.9rem',
+                  fontSize:'0.9rem', transition:'color 0.3s',
                 }}>
-                  <span style={{width:'20px', textAlign:'center'}}>
-                    {done ? '\u2713' : active ? '\u25CB' : '\u25CB'}
+                  <span style={{width:'20px', textAlign:'center', fontSize:'0.85rem'}}>
+                    {done ? '\u2713' : active ? '\u25CF' : '\u25CB'}
                   </span>
                   <span style={{animation: active ? 'pulse 1.5s ease-in-out infinite' : 'none'}}>
                     {s.label}
@@ -284,7 +317,7 @@
             })}
           </div>
 
-          {elapsed > 60 && !found && (
+          {elapsed > 90 && !found && (
             <p style={{color:'#f87171', fontSize:'0.85rem', marginTop:'2rem'}}>
               Taking longer than expected... <a href="javascript:void(0)" onClick={() => window.location.reload()} style={{color:'#EA9320'}}>Reload manually</a>
             </p>
@@ -867,6 +900,23 @@
       const [linkChecklist, setLinkChecklist] = React.useState([]);
       const [activeTab, setActiveTab] = React.useState('overview');
       const [auditRunning, setAuditRunning] = React.useState(false);
+
+      // Check if an audit is currently in progress (progress rows exist but not complete)
+      React.useEffect(() => {
+        if (!locationId || auditRunning) return;
+        (async () => {
+          try {
+            const { data } = await db.from('audit_progress')
+              .select('step,pct')
+              .eq('location_id', locationId)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (data && data.length > 0 && data[0].step !== 'complete') {
+              setAuditRunning(true);
+            }
+          } catch (e) { /* ignore */ }
+        })();
+      }, [locationId]);
 
       React.useEffect(() => {
         if (!locationId) { setLoading(false); return; }
