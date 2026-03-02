@@ -590,27 +590,36 @@
     <!-- ═══════════════════════════════════════════════════ -->
     <div class="screen active" id="screen-welcome">
       <h1 class="screen-title">Welcome to <span class="text-gradient">TattooNOW</span></h1>
-      <p class="screen-subtitle">
+      <p class="screen-subtitle" id="welcomeGreeting">
         Let's get your business set up. We'll personalize your onboarding based on
         what matters most to you — so you can focus on your art while we handle the rest.
       </p>
 
-      <div class="form-group">
-        <label class="form-label" for="contactName">Your Name</label>
-        <input class="form-input" id="contactName" type="text" placeholder="e.g. Gabe Ripley" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="businessName">Business / Studio Name</label>
-        <input class="form-input" id="businessName" type="text" placeholder="e.g. Iron Rose Tattoo" />
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="contactEmail">Email</label>
-          <input class="form-input" id="contactEmail" type="email" placeholder="gabe@studio.com" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="contactPhone">Phone</label>
-          <input class="form-input" id="contactPhone" type="tel" placeholder="(555) 123-4567" />
+      <!-- Hidden inputs — auto-populated from HighLevel URL params -->
+      <input type="hidden" id="contactName" />
+      <input type="hidden" id="businessName" />
+      <input type="hidden" id="contactEmail" />
+      <input type="hidden" id="contactPhone" />
+
+      <!-- Info card showing who we know them as -->
+      <div class="summary-card" id="welcomeInfoCard" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div>
+            <div class="summary-label">Name</div>
+            <div class="summary-value" id="welcomeName">—</div>
+          </div>
+          <div>
+            <div class="summary-label">Studio</div>
+            <div class="summary-value" id="welcomeBusiness">—</div>
+          </div>
+          <div>
+            <div class="summary-label">Email</div>
+            <div class="summary-value" id="welcomeEmail">—</div>
+          </div>
+          <div>
+            <div class="summary-label">Website</div>
+            <div class="summary-value"><a id="welcomeWebsite" href="#" target="_blank" style="color:var(--tnow-accent);text-decoration:none;">—</a></div>
+          </div>
         </div>
       </div>
 
@@ -746,12 +755,45 @@
   var WEBHOOK_OVERRIDE = params.get('webhookUrl') || params.get('webhook_url') || '';
   if (WEBHOOK_OVERRIDE) CONFIG.webhookUrl = WEBHOOK_OVERRIDE;
 
+  // HighLevel custom values passed as URL params
+  var CONTACT_NAME  = params.get('contact_name') || params.get('contactName') || '';
+  var CONTACT_EMAIL = params.get('contact_email') || params.get('contactEmail') || '';
+  var CONTACT_PHONE = params.get('contact_phone') || params.get('contactPhone') || '';
+  var LOCATION_NAME = params.get('location_name') || params.get('locationName') || params.get('businessName') || '';
+  var LOCATION_WEBSITE = params.get('location_website') || params.get('locationWebsite') || params.get('website') || '';
+
+  // Auto-populate hidden fields
+  if (CONTACT_NAME)  document.getElementById('contactName').value = CONTACT_NAME;
+  if (LOCATION_NAME) document.getElementById('businessName').value = LOCATION_NAME;
+  if (CONTACT_EMAIL) document.getElementById('contactEmail').value = CONTACT_EMAIL;
+  if (CONTACT_PHONE) document.getElementById('contactPhone').value = CONTACT_PHONE;
+
+  // Show welcome info card if we have contact data
+  if (CONTACT_NAME || LOCATION_NAME) {
+    var infoCard = document.getElementById('welcomeInfoCard');
+    if (infoCard) infoCard.style.display = 'block';
+    if (CONTACT_NAME) document.getElementById('welcomeName').textContent = CONTACT_NAME;
+    if (LOCATION_NAME) document.getElementById('welcomeBusiness').textContent = LOCATION_NAME;
+    if (CONTACT_EMAIL) document.getElementById('welcomeEmail').textContent = CONTACT_EMAIL;
+    if (LOCATION_WEBSITE) {
+      var wsEl = document.getElementById('welcomeWebsite');
+      var url = LOCATION_WEBSITE.indexOf('http') === 0 ? LOCATION_WEBSITE : 'https://' + LOCATION_WEBSITE;
+      wsEl.href = url;
+      wsEl.textContent = LOCATION_WEBSITE;
+    }
+    // Personalize greeting
+    var firstName = CONTACT_NAME.split(' ')[0];
+    document.getElementById('welcomeGreeting').innerHTML =
+      'Hey <strong>' + firstName + '</strong>! Let\'s personalize your onboarding based on ' +
+      'what matters most to you — so you can focus on your art while we handle the rest.';
+  }
+
   // Show location badge if we have an ID
   if (LOCATION_ID) {
     var badge = document.getElementById('locationBadge');
     if (badge) {
       badge.style.display = 'inline-flex';
-      document.getElementById('locationLabel').textContent = 'Location: ' + LOCATION_ID;
+      document.getElementById('locationLabel').textContent = 'Location: ' + (LOCATION_NAME || LOCATION_ID);
     }
   }
 
@@ -1135,16 +1177,6 @@
 
   // ── Navigation ──────────────────────────────────────────────
   function goToScreen(index) {
-    if (currentScreen === 0 && index > 0) {
-      var name = document.getElementById('contactName').value.trim();
-      var business = document.getElementById('businessName').value.trim();
-      var email = document.getElementById('contactEmail').value.trim();
-      if (!name || !business || !email) {
-        showToast('Please fill in your name, business name, and email.');
-        return;
-      }
-    }
-
     currentScreen = index;
 
     CONFIG.screens.forEach(function(id, i) {
@@ -1295,6 +1327,18 @@
   if (currentScreen > 0) {
     goToScreen(currentScreen);
   }
+
+  // Log page view (for future throttling — e.g. once per week per location)
+  sendWebhook('page_viewed', {
+    contactName: CONTACT_NAME,
+    contactEmail: CONTACT_EMAIL,
+    locationName: LOCATION_NAME,
+    locationWebsite: LOCATION_WEBSITE,
+    userAgent: navigator.userAgent,
+    referrer: document.referrer,
+    currentScreen: currentScreen,
+    hasSavedState: selectedBenefits.length > 0,
+  });
 })();
 </script>
 
