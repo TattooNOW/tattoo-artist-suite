@@ -1,3 +1,26 @@
+<!--
+  TattooNOW Onboarding — Benefit-Driven Flow
+  ============================================
+  Works standalone AND when injected inline via fetch (HighLevel embed).
+
+  HighLevel embed snippet:
+  ─────────────────────────────────────────────
+  <div id="tnow-onboarding-loader"></div>
+  <script>
+  fetch('https://tn.reinventingai.com/webhook/tattoonow-onboarding?file=onboarding')
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      var c = document.getElementById('tnow-onboarding-loader');
+      c.innerHTML = html;
+      c.querySelectorAll('script').forEach(function(old) {
+        var s = document.createElement('script');
+        s.textContent = old.textContent;
+        old.parentNode.replaceChild(s, old);
+      });
+    });
+  </script>
+  ─────────────────────────────────────────────
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,1117 +30,1135 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    /* ── Reset & Base ──────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:          hsl(210, 25%, 5%);
-      --card:        hsl(210, 22%, 8%);
-      --card-hover:  hsl(210, 18%, 12%);
-      --surface:     hsl(210, 20%, 10%);
-      --border:      hsl(210, 15%, 16%);
-      --primary:     hsl(197, 98%, 23%);
-      --primary-fg:  hsl(200, 20%, 96%);
-      --accent:      hsl(195, 46%, 45%);
-      --fg:          hsl(200, 20%, 92%);
-      --muted:       hsl(210, 12%, 55%);
-      --destructive: hsl(0, 72%, 51%);
-      --success:     hsl(142, 72%, 40%);
-      --glow:        hsl(197, 80%, 35%);
-      --radius:      0.5rem;
-      --font-display: 'Archivo Black', sans-serif;
-      --font-body:    'DM Sans', sans-serif;
-    }
-
-    body {
-      font-family: var(--font-body);
-      background: var(--bg);
-      color: var(--fg);
-      line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
-      min-height: 100vh;
-    }
-
-    h1, h2, h3, h4 {
-      font-family: var(--font-display);
-      letter-spacing: 0.02em;
-      line-height: 1.2;
-    }
-
-    /* ── Layout ────────────────────────────────────────── */
-    .onboarding-container {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 2rem 1.25rem;
-    }
-
-    /* ── Progress Bar ──────────────────────────────────── */
-    .progress-bar {
-      display: flex;
-      align-items: center;
-      gap: 0;
-      margin-bottom: 2rem;
-    }
-    .progress-step {
-      display: flex;
-      align-items: center;
-      flex: 1;
-    }
-    .progress-dot {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      border: 2px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.75rem;
-      font-weight: 700;
-      color: var(--muted);
-      background: var(--card);
-      flex-shrink: 0;
-      transition: all 0.3s ease;
-    }
-    .progress-dot.active {
-      border-color: var(--primary);
-      color: var(--primary-fg);
-      background: var(--primary);
-      box-shadow: 0 0 12px hsl(197, 80%, 35% / 0.5);
-    }
-    .progress-dot.completed {
-      border-color: var(--success);
-      background: var(--success);
-      color: white;
-    }
-    .progress-line {
-      flex: 1;
-      height: 2px;
-      background: var(--border);
-      margin: 0 4px;
-      transition: background 0.3s ease;
-    }
-    .progress-line.completed {
-      background: var(--success);
-    }
-
-    /* ── Screen (each onboarding step) ─────────────────── */
-    .screen {
-      display: none;
-      animation: fadeInUp 0.4s ease;
-    }
-    .screen.active {
-      display: block;
-    }
-
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .screen-title {
-      font-size: 1.75rem;
-      margin-bottom: 0.5rem;
-    }
-    .screen-subtitle {
-      color: var(--muted);
-      margin-bottom: 2rem;
-      font-size: 0.95rem;
-    }
-
-    .text-gradient {
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    /* ── Benefit Cards (priority picker) ───────────────── */
-    .benefit-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-      margin-bottom: 2rem;
-    }
-    @media (max-width: 520px) {
-      .benefit-grid { grid-template-columns: 1fr; }
-    }
-
-    .benefit-card {
-      border: 2px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.25rem;
-      background: var(--card);
-      cursor: pointer;
-      transition: all 0.25s ease;
-      position: relative;
-      user-select: none;
-    }
-    .benefit-card:hover {
-      border-color: var(--accent);
-      background: var(--card-hover);
-    }
-    .benefit-card.selected {
-      border-color: var(--primary);
-      background: hsl(197, 98%, 23% / 0.1);
-      box-shadow: 0 0 16px hsl(197, 80%, 35% / 0.2);
-    }
-    .benefit-card .badge {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: var(--primary);
-      color: var(--primary-fg);
-      font-size: 0.7rem;
-      font-weight: 700;
-      display: none;
-      align-items: center;
-      justify-content: center;
-    }
-    .benefit-card.selected .badge {
-      display: flex;
-    }
-    .benefit-icon {
-      font-size: 1.75rem;
-      margin-bottom: 0.5rem;
-    }
-    .benefit-title {
-      font-family: var(--font-display);
-      font-size: 0.85rem;
-      margin-bottom: 0.25rem;
-    }
-    .benefit-desc {
-      font-size: 0.78rem;
-      color: var(--muted);
-      line-height: 1.4;
-    }
-
-    /* ── Task List (per-benefit onboarding steps) ──────── */
-    .task-group {
-      margin-bottom: 2rem;
-    }
-    .task-group-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .task-group-icon {
-      font-size: 1.25rem;
-    }
-    .task-group-title {
-      font-family: var(--font-display);
-      font-size: 0.9rem;
-    }
-
-    .task-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      padding: 0.875rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      margin-bottom: 0.5rem;
-      background: var(--card);
-      transition: all 0.25s ease;
-    }
-    .task-item:hover {
-      border-color: var(--accent);
-    }
-    .task-item.completed {
-      border-color: var(--success);
-      opacity: 0.7;
-    }
-
-    .task-checkbox {
-      width: 22px;
-      height: 22px;
-      border: 2px solid var(--border);
-      border-radius: 4px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      margin-top: 1px;
-    }
-    .task-checkbox:hover {
-      border-color: var(--primary);
-    }
-    .task-item.completed .task-checkbox {
-      background: var(--success);
-      border-color: var(--success);
-    }
-    .task-checkbox svg {
-      display: none;
-      width: 14px;
-      height: 14px;
-    }
-    .task-item.completed .task-checkbox svg {
-      display: block;
-    }
-
-    .task-content {
-      flex: 1;
-    }
-    .task-name {
-      font-weight: 600;
-      font-size: 0.88rem;
-      margin-bottom: 0.2rem;
-    }
-    .task-desc {
-      font-size: 0.78rem;
-      color: var(--muted);
-      line-height: 1.4;
-    }
-
-    .task-status-badge {
-      font-size: 0.65rem;
-      padding: 2px 8px;
-      border-radius: 99px;
-      font-weight: 600;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-    .task-status-badge.pending {
-      background: hsl(210, 15%, 16%);
-      color: var(--muted);
-    }
-    .task-status-badge.done {
-      background: hsl(142, 72%, 40% / 0.15);
-      color: var(--success);
-    }
-
-    /* ── Contact Info Form ─────────────────────────────── */
-    .form-group {
-      margin-bottom: 1.25rem;
-    }
-    .form-label {
-      display: block;
-      font-size: 0.82rem;
-      font-weight: 600;
-      margin-bottom: 0.35rem;
-      color: var(--fg);
-    }
-    .form-input {
-      width: 100%;
-      padding: 0.65rem 0.85rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      color: var(--fg);
-      font-family: var(--font-body);
-      font-size: 0.88rem;
-      outline: none;
-      transition: border-color 0.2s ease;
-    }
-    .form-input:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px hsl(197, 98%, 23% / 0.2);
-    }
-    .form-input::placeholder {
-      color: var(--muted);
-    }
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
-    @media (max-width: 520px) {
-      .form-row { grid-template-columns: 1fr; }
-    }
-
-    /* ── Buttons ───────────────────────────────────────── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 0.7rem 1.5rem;
-      border-radius: var(--radius);
-      font-family: var(--font-body);
-      font-weight: 600;
-      font-size: 0.88rem;
-      border: none;
-      cursor: pointer;
-      transition: all 0.25s ease;
-      text-decoration: none;
-    }
-    .btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .btn-primary {
-      background: var(--primary);
-      color: var(--primary-fg);
-    }
-    .btn-primary:hover:not(:disabled) {
-      box-shadow: 0 0 20px hsl(197, 80%, 35% / 0.4);
-      filter: brightness(1.1);
-    }
-    .btn-outline {
-      background: transparent;
-      color: var(--fg);
-      border: 1px solid var(--border);
-    }
-    .btn-outline:hover:not(:disabled) {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-    .btn-group {
-      display: flex;
-      gap: 0.75rem;
-      margin-top: 1.5rem;
-    }
-    .btn-group .btn { flex: 1; }
-
-    /* ── Summary Card ──────────────────────────────────── */
-    .summary-card {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.25rem;
-      background: var(--card);
-      margin-bottom: 1rem;
-    }
-    .summary-label {
-      font-size: 0.72rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 0.35rem;
-    }
-    .summary-value {
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
-    .summary-priorities {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 0.35rem;
-    }
-    .summary-tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.3rem 0.65rem;
-      border-radius: 99px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      background: hsl(197, 98%, 23% / 0.12);
-      color: var(--accent);
-      border: 1px solid hsl(197, 98%, 23% / 0.25);
-    }
-
-    /* ── Celebration Screen ────────────────────────────── */
-    .celebration-icon {
-      font-size: 3.5rem;
-      text-align: center;
-      margin-bottom: 1rem;
-    }
-    .next-steps-list {
-      list-style: none;
-      padding: 0;
-    }
-    .next-steps-list li {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.88rem;
-    }
-    .next-steps-list li:last-child {
-      border-bottom: none;
-    }
-    .step-number {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: var(--primary);
-      color: var(--primary-fg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.7rem;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    /* ── Toast Notification ────────────────────────────── */
-    .toast {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      padding: 0.75rem 1.25rem;
-      background: var(--card);
-      border: 1px solid var(--success);
-      border-radius: var(--radius);
-      color: var(--fg);
-      font-size: 0.82rem;
-      font-weight: 500;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-      transform: translateY(100px);
-      opacity: 0;
-      transition: all 0.3s ease;
-      z-index: 100;
-    }
-    .toast.visible {
-      transform: translateY(0);
-      opacity: 1;
-    }
-
-    /* ── Webhook Status ────────────────────────────────── */
-    .webhook-status {
-      font-size: 0.72rem;
-      color: var(--muted);
-      text-align: center;
-      margin-top: 1rem;
-    }
-
-    /* ── Location Badge ────────────────────────────────── */
-    .location-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.3rem 0.75rem;
-      border-radius: 99px;
-      font-size: 0.72rem;
-      font-weight: 600;
-      background: hsl(210, 18%, 14%);
-      color: var(--muted);
-      margin-bottom: 1.5rem;
-    }
-  </style>
 </head>
 <body>
 
-<div class="onboarding-container">
-  <!-- Location Badge -->
-  <div class="location-badge" id="locationBadge" style="display:none;">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-    <span id="locationLabel">Location</span>
-  </div>
+<style>
+  /* Font import — survives innerHTML injection (unlike <link> in <head>) */
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&display=swap');
 
-  <!-- Progress Bar -->
-  <div class="progress-bar" id="progressBar"></div>
+  /* ── Reset & Base (scoped) ─────────────────────────── */
+  .tnow-onboarding *, .tnow-onboarding *::before, .tnow-onboarding *::after {
+    box-sizing: border-box; margin: 0; padding: 0;
+  }
 
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- SCREEN 1: Welcome                                   -->
-  <!-- ═══════════════════════════════════════════════════ -->
-  <div class="screen active" id="screen-welcome">
-    <h1 class="screen-title">Welcome to <span class="text-gradient">TattooNOW</span></h1>
-    <p class="screen-subtitle">
-      Let's get your business set up. We'll personalize your onboarding based on
-      what matters most to you — so you can focus on your art while we handle the rest.
-    </p>
+  .tnow-onboarding {
+    --tnow-bg:          hsl(210, 25%, 5%);
+    --tnow-card:        hsl(210, 22%, 8%);
+    --tnow-card-hover:  hsl(210, 18%, 12%);
+    --tnow-surface:     hsl(210, 20%, 10%);
+    --tnow-border:      hsl(210, 15%, 16%);
+    --tnow-primary:     hsl(197, 98%, 23%);
+    --tnow-primary-fg:  hsl(200, 20%, 96%);
+    --tnow-accent:      hsl(195, 46%, 45%);
+    --tnow-fg:          hsl(200, 20%, 92%);
+    --tnow-muted:       hsl(210, 12%, 55%);
+    --tnow-destructive: hsl(0, 72%, 51%);
+    --tnow-success:     hsl(142, 72%, 40%);
+    --tnow-glow:        hsl(197, 80%, 35%);
+    --tnow-radius:      0.5rem;
+    --tnow-font-display: 'Archivo Black', sans-serif;
+    --tnow-font-body:    'DM Sans', sans-serif;
 
-    <div class="form-group">
-      <label class="form-label" for="contactName">Your Name</label>
-      <input class="form-input" id="contactName" type="text" placeholder="e.g. Gabe Ripley" />
+    font-family: var(--tnow-font-body);
+    background: var(--tnow-bg);
+    color: var(--tnow-fg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  .tnow-onboarding h1,
+  .tnow-onboarding h2,
+  .tnow-onboarding h3,
+  .tnow-onboarding h4 {
+    font-family: var(--tnow-font-display);
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+  }
+
+  /* ── Layout ────────────────────────────────────────── */
+  .tnow-onboarding .onboarding-container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem;
+  }
+
+  /* ── Progress Bar ──────────────────────────────────── */
+  .tnow-onboarding .progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 2rem;
+  }
+  .tnow-onboarding .progress-step {
+    display: flex;
+    align-items: center;
+    flex: 1;
+  }
+  .tnow-onboarding .progress-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--tnow-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--tnow-muted);
+    background: var(--tnow-card);
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+  }
+  .tnow-onboarding .progress-dot.active {
+    border-color: var(--tnow-primary);
+    color: var(--tnow-primary-fg);
+    background: var(--tnow-primary);
+    box-shadow: 0 0 12px hsl(197, 80%, 35% / 0.5);
+  }
+  .tnow-onboarding .progress-dot.completed {
+    border-color: var(--tnow-success);
+    background: var(--tnow-success);
+    color: white;
+  }
+  .tnow-onboarding .progress-line {
+    flex: 1;
+    height: 2px;
+    background: var(--tnow-border);
+    margin: 0 4px;
+    transition: background 0.3s ease;
+  }
+  .tnow-onboarding .progress-line.completed {
+    background: var(--tnow-success);
+  }
+
+  /* ── Screen (each onboarding step) ─────────────────── */
+  .tnow-onboarding .screen {
+    display: none;
+    animation: tnowFadeInUp 0.4s ease;
+  }
+  .tnow-onboarding .screen.active {
+    display: block;
+  }
+
+  @keyframes tnowFadeInUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .tnow-onboarding .screen-title {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+  .tnow-onboarding .screen-subtitle {
+    color: var(--tnow-muted);
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+  }
+
+  .tnow-onboarding .text-gradient {
+    background: linear-gradient(135deg, var(--tnow-primary), var(--tnow-accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Benefit Cards (priority picker) ───────────────── */
+  .tnow-onboarding .benefit-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+  }
+  @media (max-width: 520px) {
+    .tnow-onboarding .benefit-grid { grid-template-columns: 1fr; }
+  }
+
+  .tnow-onboarding .benefit-card {
+    border: 2px solid var(--tnow-border);
+    border-radius: var(--tnow-radius);
+    padding: 1.25rem;
+    background: var(--tnow-card);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    user-select: none;
+  }
+  .tnow-onboarding .benefit-card:hover {
+    border-color: var(--tnow-accent);
+    background: var(--tnow-card-hover);
+  }
+  .tnow-onboarding .benefit-card.selected {
+    border-color: var(--tnow-primary);
+    background: hsl(197, 98%, 23% / 0.1);
+    box-shadow: 0 0 16px hsl(197, 80%, 35% / 0.2);
+  }
+  .tnow-onboarding .benefit-card .badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--tnow-primary);
+    color: var(--tnow-primary-fg);
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .tnow-onboarding .benefit-card.selected .badge {
+    display: flex;
+  }
+  .tnow-onboarding .benefit-icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+  .tnow-onboarding .benefit-title {
+    font-family: var(--tnow-font-display);
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  .tnow-onboarding .benefit-desc {
+    font-size: 0.78rem;
+    color: var(--tnow-muted);
+    line-height: 1.4;
+  }
+
+  /* ── Task List (per-benefit onboarding steps) ──────── */
+  .tnow-onboarding .task-group {
+    margin-bottom: 2rem;
+  }
+  .tnow-onboarding .task-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--tnow-border);
+  }
+  .tnow-onboarding .task-group-icon {
+    font-size: 1.25rem;
+  }
+  .tnow-onboarding .task-group-title {
+    font-family: var(--tnow-font-display);
+    font-size: 0.9rem;
+  }
+
+  .tnow-onboarding .task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--tnow-border);
+    border-radius: var(--tnow-radius);
+    margin-bottom: 0.5rem;
+    background: var(--tnow-card);
+    transition: all 0.25s ease;
+  }
+  .tnow-onboarding .task-item:hover {
+    border-color: var(--tnow-accent);
+  }
+  .tnow-onboarding .task-item.completed {
+    border-color: var(--tnow-success);
+    opacity: 0.7;
+  }
+
+  .tnow-onboarding .task-checkbox {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--tnow-border);
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 1px;
+  }
+  .tnow-onboarding .task-checkbox:hover {
+    border-color: var(--tnow-primary);
+  }
+  .tnow-onboarding .task-item.completed .task-checkbox {
+    background: var(--tnow-success);
+    border-color: var(--tnow-success);
+  }
+  .tnow-onboarding .task-checkbox svg {
+    display: none;
+    width: 14px;
+    height: 14px;
+  }
+  .tnow-onboarding .task-item.completed .task-checkbox svg {
+    display: block;
+  }
+
+  .tnow-onboarding .task-content {
+    flex: 1;
+  }
+  .tnow-onboarding .task-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+    margin-bottom: 0.2rem;
+  }
+  .tnow-onboarding .task-desc {
+    font-size: 0.78rem;
+    color: var(--tnow-muted);
+    line-height: 1.4;
+  }
+
+  .tnow-onboarding .task-status-badge {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .tnow-onboarding .task-status-badge.pending {
+    background: hsl(210, 15%, 16%);
+    color: var(--tnow-muted);
+  }
+  .tnow-onboarding .task-status-badge.done {
+    background: hsl(142, 72%, 40% / 0.15);
+    color: var(--tnow-success);
+  }
+
+  /* ── Contact Info Form ─────────────────────────────── */
+  .tnow-onboarding .form-group {
+    margin-bottom: 1.25rem;
+  }
+  .tnow-onboarding .form-label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    color: var(--tnow-fg);
+  }
+  .tnow-onboarding .form-input {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid var(--tnow-border);
+    border-radius: var(--tnow-radius);
+    background: var(--tnow-surface);
+    color: var(--tnow-fg);
+    font-family: var(--tnow-font-body);
+    font-size: 0.88rem;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .tnow-onboarding .form-input:focus {
+    border-color: var(--tnow-primary);
+    box-shadow: 0 0 0 2px hsl(197, 98%, 23% / 0.2);
+  }
+  .tnow-onboarding .form-input::placeholder {
+    color: var(--tnow-muted);
+  }
+  .tnow-onboarding .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  @media (max-width: 520px) {
+    .tnow-onboarding .form-row { grid-template-columns: 1fr; }
+  }
+
+  /* ── Buttons ───────────────────────────────────────── */
+  .tnow-onboarding .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.5rem;
+    border-radius: var(--tnow-radius);
+    font-family: var(--tnow-font-body);
+    font-weight: 600;
+    font-size: 0.88rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    text-decoration: none;
+  }
+  .tnow-onboarding .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .tnow-onboarding .btn-primary {
+    background: var(--tnow-primary);
+    color: var(--tnow-primary-fg);
+  }
+  .tnow-onboarding .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 20px hsl(197, 80%, 35% / 0.4);
+    filter: brightness(1.1);
+  }
+  .tnow-onboarding .btn-outline {
+    background: transparent;
+    color: var(--tnow-fg);
+    border: 1px solid var(--tnow-border);
+  }
+  .tnow-onboarding .btn-outline:hover:not(:disabled) {
+    border-color: var(--tnow-primary);
+    color: var(--tnow-primary);
+  }
+  .tnow-onboarding .btn-group {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+  .tnow-onboarding .btn-group .btn { flex: 1; }
+
+  /* ── Summary Card ──────────────────────────────────── */
+  .tnow-onboarding .summary-card {
+    border: 1px solid var(--tnow-border);
+    border-radius: var(--tnow-radius);
+    padding: 1.25rem;
+    background: var(--tnow-card);
+    margin-bottom: 1rem;
+  }
+  .tnow-onboarding .summary-label {
+    font-size: 0.72rem;
+    color: var(--tnow-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.35rem;
+  }
+  .tnow-onboarding .summary-value {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .tnow-onboarding .summary-priorities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+  }
+  .tnow-onboarding .summary-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: hsl(197, 98%, 23% / 0.12);
+    color: var(--tnow-accent);
+    border: 1px solid hsl(197, 98%, 23% / 0.25);
+  }
+
+  /* ── Celebration Screen ────────────────────────────── */
+  .tnow-onboarding .celebration-icon {
+    font-size: 3.5rem;
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+  .tnow-onboarding .next-steps-list {
+    list-style: none;
+    padding: 0;
+  }
+  .tnow-onboarding .next-steps-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--tnow-border);
+    font-size: 0.88rem;
+  }
+  .tnow-onboarding .next-steps-list li:last-child {
+    border-bottom: none;
+  }
+  .tnow-onboarding .step-number {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--tnow-primary);
+    color: var(--tnow-primary-fg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* ── Toast Notification ────────────────────────────── */
+  .tnow-onboarding .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.75rem 1.25rem;
+    background: var(--tnow-card);
+    border: 1px solid var(--tnow-success);
+    border-radius: var(--tnow-radius);
+    color: var(--tnow-fg);
+    font-size: 0.82rem;
+    font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 100;
+  }
+  .tnow-onboarding .toast.visible {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  /* ── Webhook Status ────────────────────────────────── */
+  .tnow-onboarding .webhook-status {
+    font-size: 0.72rem;
+    color: var(--tnow-muted);
+    text-align: center;
+    margin-top: 1rem;
+  }
+
+  /* ── Location Badge ────────────────────────────────── */
+  .tnow-onboarding .location-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 99px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: hsl(210, 18%, 14%);
+    color: var(--tnow-muted);
+    margin-bottom: 1.5rem;
+  }
+</style>
+
+<div class="tnow-onboarding">
+  <div class="onboarding-container">
+    <!-- Location Badge -->
+    <div class="location-badge" id="locationBadge" style="display:none;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span id="locationLabel">Location</span>
     </div>
-    <div class="form-group">
-      <label class="form-label" for="businessName">Business / Studio Name</label>
-      <input class="form-input" id="businessName" type="text" placeholder="e.g. Iron Rose Tattoo" />
-    </div>
-    <div class="form-row">
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- SCREEN 1: Welcome                                   -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="screen active" id="screen-welcome">
+      <h1 class="screen-title">Welcome to <span class="text-gradient">TattooNOW</span></h1>
+      <p class="screen-subtitle">
+        Let's get your business set up. We'll personalize your onboarding based on
+        what matters most to you — so you can focus on your art while we handle the rest.
+      </p>
+
       <div class="form-group">
-        <label class="form-label" for="contactEmail">Email</label>
-        <input class="form-input" id="contactEmail" type="email" placeholder="gabe@studio.com" />
+        <label class="form-label" for="contactName">Your Name</label>
+        <input class="form-input" id="contactName" type="text" placeholder="e.g. Gabe Ripley" />
       </div>
       <div class="form-group">
-        <label class="form-label" for="contactPhone">Phone</label>
-        <input class="form-input" id="contactPhone" type="tel" placeholder="(555) 123-4567" />
+        <label class="form-label" for="businessName">Business / Studio Name</label>
+        <input class="form-input" id="businessName" type="text" placeholder="e.g. Iron Rose Tattoo" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="contactEmail">Email</label>
+          <input class="form-input" id="contactEmail" type="email" placeholder="gabe@studio.com" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="contactPhone">Phone</label>
+          <input class="form-input" id="contactPhone" type="tel" placeholder="(555) 123-4567" />
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="tnowGoToScreen(1)" id="welcomeNext">
+          Let's Go
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
       </div>
     </div>
 
-    <div class="btn-group">
-      <button class="btn btn-primary" onclick="goToScreen(1)" id="welcomeNext">
-        Let's Go
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-      </button>
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- SCREEN 2: Pick Your Priorities                      -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-priorities">
+      <h2 class="screen-title">What Matters Most <span class="text-gradient">To You?</span></h2>
+      <p class="screen-subtitle">
+        Select your top priorities (pick up to 4). We'll build your onboarding around these goals.
+      </p>
+
+      <div class="benefit-grid" id="benefitGrid"></div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="tnowGoToScreen(0)">Back</button>
+        <button class="btn btn-primary" onclick="tnowConfirmPriorities()" id="prioritiesNext" disabled>
+          Build My Plan
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- SCREEN 3: Your Onboarding Tasks                     -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-tasks">
+      <h2 class="screen-title">Your <span class="text-gradient">Onboarding Plan</span></h2>
+      <p class="screen-subtitle">
+        Complete these tasks in order. Check each one off as you go — your progress is saved automatically.
+      </p>
+
+      <div id="taskList"></div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="tnowGoToScreen(1)">Edit Priorities</button>
+        <button class="btn btn-primary" onclick="tnowGoToScreen(3)" id="tasksNext" disabled>
+          Review &amp; Finish
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- SCREEN 4: Summary & Complete                        -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-complete">
+      <div class="celebration-icon">&#127881;</div>
+      <h2 class="screen-title" style="text-align:center;">You're <span class="text-gradient">All Set!</span></h2>
+      <p class="screen-subtitle" style="text-align:center;">
+        Great job! Here's a summary of your onboarding and what comes next.
+      </p>
+
+      <div class="summary-card">
+        <div class="summary-label">Business</div>
+        <div class="summary-value" id="summaryBusiness">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Contact</div>
+        <div class="summary-value" id="summaryContact">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Your Priorities</div>
+        <div class="summary-priorities" id="summaryPriorities"></div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Onboarding Progress</div>
+        <div class="summary-value" id="summaryProgress">—</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label">What's Next</div>
+        <ol class="next-steps-list">
+          <li>
+            <span class="step-number">1</span>
+            <span>Your dedicated TattooNOW specialist will reach out within 24 hours to walk you through your priority tools.</span>
+          </li>
+          <li>
+            <span class="step-number">2</span>
+            <span>We'll schedule a live setup session to configure your top-priority features together.</span>
+          </li>
+          <li>
+            <span class="step-number">3</span>
+            <span>Join the weekly Business Roundtable for ongoing strategy, support, and networking with peers.</span>
+          </li>
+        </ol>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="tnowGoToScreen(2)">Back to Tasks</button>
+        <button class="btn btn-primary" onclick="tnowSubmitOnboarding()">
+          Submit &amp; Finish
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </div>
+
+      <div class="webhook-status" id="webhookStatus"></div>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- SCREEN 2: Pick Your Priorities                      -->
-  <!-- ═══════════════════════════════════════════════════ -->
-  <div class="screen" id="screen-priorities">
-    <h2 class="screen-title">What Matters Most <span class="text-gradient">To You?</span></h2>
-    <p class="screen-subtitle">
-      Select your top priorities (pick up to 4). We'll build your onboarding around these goals.
-    </p>
-
-    <div class="benefit-grid" id="benefitGrid"></div>
-
-    <div class="btn-group">
-      <button class="btn btn-outline" onclick="goToScreen(0)">Back</button>
-      <button class="btn btn-primary" onclick="confirmPriorities()" id="prioritiesNext" disabled>
-        Build My Plan
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- SCREEN 3: Your Onboarding Tasks                     -->
-  <!-- ═══════════════════════════════════════════════════ -->
-  <div class="screen" id="screen-tasks">
-    <h2 class="screen-title">Your <span class="text-gradient">Onboarding Plan</span></h2>
-    <p class="screen-subtitle">
-      Complete these tasks in order. Check each one off as you go — your progress is saved automatically.
-    </p>
-
-    <div id="taskList"></div>
-
-    <div class="btn-group">
-      <button class="btn btn-outline" onclick="goToScreen(1)">Edit Priorities</button>
-      <button class="btn btn-primary" onclick="goToScreen(3)" id="tasksNext" disabled>
-        Review &amp; Finish
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════ -->
-  <!-- SCREEN 4: Summary & Complete                        -->
-  <!-- ═══════════════════════════════════════════════════ -->
-  <div class="screen" id="screen-complete">
-    <div class="celebration-icon">&#127881;</div>
-    <h2 class="screen-title" style="text-align:center;">You're <span class="text-gradient">All Set!</span></h2>
-    <p class="screen-subtitle" style="text-align:center;">
-      Great job! Here's a summary of your onboarding and what comes next.
-    </p>
-
-    <div class="summary-card">
-      <div class="summary-label">Business</div>
-      <div class="summary-value" id="summaryBusiness">—</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Contact</div>
-      <div class="summary-value" id="summaryContact">—</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Your Priorities</div>
-      <div class="summary-priorities" id="summaryPriorities"></div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-label">Onboarding Progress</div>
-      <div class="summary-value" id="summaryProgress">—</div>
-    </div>
-
-    <div class="summary-card">
-      <div class="summary-label">What's Next</div>
-      <ol class="next-steps-list">
-        <li>
-          <span class="step-number">1</span>
-          <span>Your dedicated TattooNOW specialist will reach out within 24 hours to walk you through your priority tools.</span>
-        </li>
-        <li>
-          <span class="step-number">2</span>
-          <span>We'll schedule a live setup session to configure your top-priority features together.</span>
-        </li>
-        <li>
-          <span class="step-number">3</span>
-          <span>Join the weekly Business Roundtable for ongoing strategy, support, and networking with peers.</span>
-        </li>
-      </ol>
-    </div>
-
-    <div class="btn-group">
-      <button class="btn btn-outline" onclick="goToScreen(2)">Back to Tasks</button>
-      <button class="btn btn-primary" onclick="submitOnboarding()">
-        Submit &amp; Finish
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-      </button>
-    </div>
-
-    <div class="webhook-status" id="webhookStatus"></div>
-  </div>
+  <!-- Toast -->
+  <div class="toast" id="tnowToast"></div>
 </div>
-
-<!-- Toast -->
-<div class="toast" id="toast"></div>
 
 <script>
 /* ═══════════════════════════════════════════════════════════
    TattooNOW Onboarding — Benefit-Driven Flow
+   All functions prefixed with tnow* to avoid global conflicts
+   when injected inline into HighLevel pages.
    ═══════════════════════════════════════════════════════════ */
+(function() {
+  'use strict';
 
-// ── Configuration ───────────────────────────────────────────
-const CONFIG = {
-  // Set your N8N webhook URL here (or any endpoint that accepts POST JSON)
-  webhookUrl: '',
-  // Maximum number of priorities a client can pick
-  maxPriorities: 4,
-  // Screens in order
-  screens: ['screen-welcome', 'screen-priorities', 'screen-tasks', 'screen-complete'],
-};
+  // ── Configuration ───────────────────────────────────────────
+  var CONFIG = {
+    webhookUrl: '',
+    maxPriorities: 4,
+    screens: ['screen-welcome', 'screen-priorities', 'screen-tasks', 'screen-complete'],
+  };
 
-// ── URL Parameters ──────────────────────────────────────────
-const params = new URLSearchParams(window.location.search);
-const LOCATION_ID  = params.get('locationId') || params.get('location_id') || '';
-const PACKAGE_TYPE = params.get('package') || '';
-const WEBHOOK_OVERRIDE = params.get('webhookUrl') || params.get('webhook_url') || '';
-if (WEBHOOK_OVERRIDE) CONFIG.webhookUrl = WEBHOOK_OVERRIDE;
+  // ── URL Parameters ──────────────────────────────────────────
+  var params = new URLSearchParams(window.location.search);
+  var LOCATION_ID  = params.get('locationId') || params.get('location_id') || '';
+  var PACKAGE_TYPE = params.get('package') || '';
+  var WEBHOOK_OVERRIDE = params.get('webhookUrl') || params.get('webhook_url') || '';
+  if (WEBHOOK_OVERRIDE) CONFIG.webhookUrl = WEBHOOK_OVERRIDE;
 
-// Show location badge if we have an ID
-if (LOCATION_ID) {
-  const badge = document.getElementById('locationBadge');
-  badge.style.display = 'inline-flex';
-  document.getElementById('locationLabel').textContent = 'Location: ' + LOCATION_ID;
-}
-
-// ── Benefit Definitions ─────────────────────────────────────
-// Each benefit maps to a set of onboarding tasks & tools
-const BENEFITS = [
-  {
-    id: 'get-more-clients',
-    icon: '&#128200;',
-    title: 'Get More Clients',
-    desc: 'Boost your visibility online and attract new business consistently.',
-    tools: ['website', 'reputation', 'post-scheduler', 'email-marketing'],
-    tasks: [
-      { id: 'gmc-1', name: 'Launch your portfolio website', desc: 'Publish a search-engine-optimized portfolio site showcasing your work.', tool: 'Website Builder' },
-      { id: 'gmc-2', name: 'Set up reputation management', desc: 'Automate Google review requests after every appointment.', tool: 'Reputation' },
-      { id: 'gmc-3', name: 'Connect social media accounts', desc: 'Link Instagram, Facebook, and TikTok for auto-posting.', tool: 'Post Scheduler' },
-      { id: 'gmc-4', name: 'Create your first email campaign', desc: 'Draft a welcome email or flash sale announcement for your list.', tool: 'Email Marketing' },
-    ],
-  },
-  {
-    id: 'never-miss-leads',
-    icon: '&#128172;',
-    title: 'Never Miss a Lead',
-    desc: 'Build proper sales funnels that capture every inquiry and convert them into booked clients.',
-    tools: ['funnels', 'crm', 'one-box', 'ivr'],
-    tasks: [
-      { id: 'nml-1', name: 'Create your lead capture funnel', desc: 'Build a sales funnel that turns website visitors and social traffic into booked consultations.', tool: 'Sales Funnels' },
-      { id: 'nml-2', name: 'Set up automated follow-up sequences', desc: 'Configure nurture sequences so no lead goes cold — texts, emails, and reminders on autopilot.', tool: 'Sales Funnels' },
-      { id: 'nml-3', name: 'Import your client list to CRM', desc: 'Upload existing contacts and tag them so no one falls through the cracks.', tool: 'CRM' },
-      { id: 'nml-4', name: 'Activate One-Box unified inbox', desc: 'Connect calls, texts, DMs, and emails into a single view so you never miss an inquiry.', tool: 'One-Box' },
-    ],
-  },
-  {
-    id: 'communicate-best',
-    icon: '&#11088;',
-    title: 'Communicate Best-in-Class',
-    desc: 'Professional scheduling, reminders, and client communication that keeps them coming back.',
-    tools: ['calendars', 'one-box', 'reputation', 'appointments'],
-    tasks: [
-      { id: 'cbc-1', name: 'Configure your booking calendar', desc: 'Set your availability and enable online booking with deposits — no more back-and-forth texting.', tool: 'Calendars' },
-      { id: 'cbc-2', name: 'Enable automated reminders', desc: 'Reduce no-shows with text and email reminders before every appointment.', tool: 'Calendars' },
-      { id: 'cbc-3', name: 'Set up two-way texting', desc: 'Give clients a professional way to reach you — with auto-replies when you\'re busy tattooing.', tool: 'One-Box' },
-      { id: 'cbc-4', name: 'Automate post-session review requests', desc: 'Automatically ask for Google reviews after every appointment while the experience is fresh.', tool: 'Reputation' },
-    ],
-  },
-  {
-    id: 'get-paid-faster',
-    icon: '&#128176;',
-    title: 'Get Paid Faster',
-    desc: 'Streamline payments — deposits, invoicing, and instant text-to-pay.',
-    tools: ['appointments', 'text-to-pay', 'payments'],
-    tasks: [
-      { id: 'gpf-1', name: 'Enable online booking with deposits', desc: 'Require deposits at booking time to reduce no-shows and secure revenue.', tool: 'Appointments' },
-      { id: 'gpf-2', name: 'Set up Text-to-Pay', desc: 'Send payment links via SMS so clients can pay instantly from their phone.', tool: 'Text-to-Pay' },
-      { id: 'gpf-3', name: 'Connect payment processing', desc: 'Link your bank account and set up credit card processing.', tool: 'Payments' },
-      { id: 'gpf-4', name: 'Configure auto-invoicing', desc: 'Automatically send invoices and receipts after appointments.', tool: 'Appointments' },
-    ],
-  },
-  {
-    id: 'save-time',
-    icon: '&#9200;',
-    title: 'Save Time',
-    desc: 'Automate the busywork — posting, follow-ups, and client communication.',
-    tools: ['post-scheduler', 'one-box', 'email-marketing'],
-    tasks: [
-      { id: 'st-1', name: 'Schedule your first week of posts', desc: 'Queue up social media posts so you never miss a day.', tool: 'Post Scheduler' },
-      { id: 'st-2', name: 'Set up auto-replies in One-Box', desc: 'Configure after-hours messages and quick replies for common questions.', tool: 'One-Box' },
-      { id: 'st-3', name: 'Create email automation sequences', desc: 'Build a post-appointment follow-up sequence that runs on autopilot.', tool: 'Email Marketing' },
-      { id: 'st-4', name: 'Enable appointment reminders', desc: 'Reduce no-shows with automated text and email reminders.', tool: 'Calendars' },
-    ],
-  },
-  {
-    id: 'grow-team',
-    icon: '&#129309;',
-    title: 'Grow Your Team',
-    desc: 'Recruit talent, manage multiple artists, and scale your studio.',
-    tools: ['multi-artist', 'recruiting', 'business-plan'],
-    tasks: [
-      { id: 'gt-1', name: 'Set up multi-artist management', desc: 'Add your team members with individual calendars and permissions.', tool: 'Multi-Artist' },
-      { id: 'gt-2', name: 'Create artist profiles', desc: 'Build portfolio pages for each artist to attract their ideal clients.', tool: 'Website Builder' },
-      { id: 'gt-3', name: 'Explore artist recruiting services', desc: 'Connect with TattooNOW\'s placement network to find new talent.', tool: 'Recruiting' },
-      { id: 'gt-4', name: 'Draft your studio business plan', desc: 'Use the Living Business Plan template to set goals and benchmarks.', tool: 'Business Plan' },
-    ],
-  },
-  {
-    id: 'level-up',
-    icon: '&#127942;',
-    title: 'Level Up My Business',
-    desc: 'Expert consulting, education, and strategic business planning.',
-    tools: ['roundtable', 'consulting', 'courses', 'business-plan'],
-    tasks: [
-      { id: 'lu-1', name: 'Join the Business Roundtable', desc: 'RSVP for the weekly session with industry peers and experts.', tool: 'Roundtable' },
-      { id: 'lu-2', name: 'Schedule your 1-on-1 consult', desc: 'Book your initial consultation with a TattooNOW business expert.', tool: 'Consulting' },
-      { id: 'lu-3', name: 'Explore RIT courses', desc: 'Browse professional development courses tailored for tattooers.', tool: 'Courses' },
-      { id: 'lu-4', name: 'Start your Living Business Plan', desc: 'Begin building your roadmap for growth with guided templates.', tool: 'Business Plan' },
-    ],
-  },
-];
-
-// ── State ───────────────────────────────────────────────────
-let currentScreen = 0;
-let selectedBenefits = [];   // Array of benefit IDs in selection order
-let completedTasks = {};     // { taskId: true }
-
-// Try to restore state from localStorage (keyed by location)
-const STORAGE_KEY = 'tattoonow_onboarding_' + (LOCATION_ID || 'default');
-function loadState() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved) {
-      if (saved.selectedBenefits) selectedBenefits = saved.selectedBenefits;
-      if (saved.completedTasks) completedTasks = saved.completedTasks;
-      if (saved.contactName) document.getElementById('contactName').value = saved.contactName;
-      if (saved.businessName) document.getElementById('businessName').value = saved.businessName;
-      if (saved.contactEmail) document.getElementById('contactEmail').value = saved.contactEmail;
-      if (saved.contactPhone) document.getElementById('contactPhone').value = saved.contactPhone;
-      if (saved.currentScreen !== undefined) currentScreen = saved.currentScreen;
+  // Show location badge if we have an ID
+  if (LOCATION_ID) {
+    var badge = document.getElementById('locationBadge');
+    if (badge) {
+      badge.style.display = 'inline-flex';
+      document.getElementById('locationLabel').textContent = 'Location: ' + LOCATION_ID;
     }
-  } catch (e) { /* ignore */ }
-}
-
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      selectedBenefits,
-      completedTasks,
-      contactName: document.getElementById('contactName').value,
-      businessName: document.getElementById('businessName').value,
-      contactEmail: document.getElementById('contactEmail').value,
-      contactPhone: document.getElementById('contactPhone').value,
-      currentScreen,
-    }));
-  } catch (e) { /* ignore */ }
-}
-
-// ── Render: Progress Bar ────────────────────────────────────
-function renderProgressBar() {
-  const bar = document.getElementById('progressBar');
-  const labels = ['Welcome', 'Priorities', 'Tasks', 'Complete'];
-  bar.innerHTML = '';
-  labels.forEach((label, i) => {
-    const isCompleted = i < currentScreen;
-    const isActive = i === currentScreen;
-
-    const step = document.createElement('div');
-    step.className = 'progress-step';
-
-    const dot = document.createElement('div');
-    dot.className = 'progress-dot' + (isActive ? ' active' : '') + (isCompleted ? ' completed' : '');
-    dot.textContent = isCompleted ? '\u2713' : (i + 1);
-    dot.title = label;
-    step.appendChild(dot);
-
-    if (i < labels.length - 1) {
-      const line = document.createElement('div');
-      line.className = 'progress-line' + (isCompleted ? ' completed' : '');
-      step.appendChild(line);
-    }
-
-    bar.appendChild(step);
-  });
-}
-
-// ── Render: Benefit Grid ────────────────────────────────────
-function renderBenefitGrid() {
-  const grid = document.getElementById('benefitGrid');
-  grid.innerHTML = '';
-
-  BENEFITS.forEach(b => {
-    const idx = selectedBenefits.indexOf(b.id);
-    const isSelected = idx !== -1;
-
-    const card = document.createElement('div');
-    card.className = 'benefit-card' + (isSelected ? ' selected' : '');
-    card.onclick = () => toggleBenefit(b.id);
-    card.innerHTML = `
-      <div class="badge">${isSelected ? idx + 1 : ''}</div>
-      <div class="benefit-icon">${b.icon}</div>
-      <div class="benefit-title">${b.title}</div>
-      <div class="benefit-desc">${b.desc}</div>
-    `;
-    grid.appendChild(card);
-  });
-
-  // Enable/disable next button
-  document.getElementById('prioritiesNext').disabled = selectedBenefits.length === 0;
-}
-
-function toggleBenefit(id) {
-  const idx = selectedBenefits.indexOf(id);
-  if (idx !== -1) {
-    selectedBenefits.splice(idx, 1);
-  } else if (selectedBenefits.length < CONFIG.maxPriorities) {
-    selectedBenefits.push(id);
   }
-  saveState();
-  renderBenefitGrid();
-}
 
-function confirmPriorities() {
-  if (selectedBenefits.length === 0) return;
-  renderTaskList();
-  goToScreen(2);
+  // ── Benefit Definitions ─────────────────────────────────────
+  var BENEFITS = [
+    {
+      id: 'get-more-clients',
+      icon: '&#128200;',
+      title: 'Get More Clients',
+      desc: 'Boost your visibility online and attract new business consistently.',
+      tools: ['website', 'reputation', 'post-scheduler', 'email-marketing'],
+      tasks: [
+        { id: 'gmc-1', name: 'Launch your portfolio website', desc: 'Publish a search-engine-optimized portfolio site showcasing your work.', tool: 'Website Builder' },
+        { id: 'gmc-2', name: 'Set up reputation management', desc: 'Automate Google review requests after every appointment.', tool: 'Reputation' },
+        { id: 'gmc-3', name: 'Connect social media accounts', desc: 'Link Instagram, Facebook, and TikTok for auto-posting.', tool: 'Post Scheduler' },
+        { id: 'gmc-4', name: 'Create your first email campaign', desc: 'Draft a welcome email or flash sale announcement for your list.', tool: 'Email Marketing' },
+      ],
+    },
+    {
+      id: 'never-miss-leads',
+      icon: '&#128172;',
+      title: 'Never Miss a Lead',
+      desc: 'Build proper sales funnels that capture every inquiry and convert them into booked clients.',
+      tools: ['funnels', 'crm', 'one-box', 'ivr'],
+      tasks: [
+        { id: 'nml-1', name: 'Create your lead capture funnel', desc: 'Build a sales funnel that turns website visitors and social traffic into booked consultations.', tool: 'Sales Funnels' },
+        { id: 'nml-2', name: 'Set up automated follow-up sequences', desc: 'Configure nurture sequences so no lead goes cold — texts, emails, and reminders on autopilot.', tool: 'Sales Funnels' },
+        { id: 'nml-3', name: 'Import your client list to CRM', desc: 'Upload existing contacts and tag them so no one falls through the cracks.', tool: 'CRM' },
+        { id: 'nml-4', name: 'Activate One-Box unified inbox', desc: 'Connect calls, texts, DMs, and emails into a single view so you never miss an inquiry.', tool: 'One-Box' },
+      ],
+    },
+    {
+      id: 'communicate-best',
+      icon: '&#11088;',
+      title: 'Communicate Best-in-Class',
+      desc: 'Professional scheduling, reminders, and client communication that keeps them coming back.',
+      tools: ['calendars', 'one-box', 'reputation', 'appointments'],
+      tasks: [
+        { id: 'cbc-1', name: 'Configure your booking calendar', desc: 'Set your availability and enable online booking with deposits — no more back-and-forth texting.', tool: 'Calendars' },
+        { id: 'cbc-2', name: 'Enable automated reminders', desc: 'Reduce no-shows with text and email reminders before every appointment.', tool: 'Calendars' },
+        { id: 'cbc-3', name: 'Set up two-way texting', desc: 'Give clients a professional way to reach you — with auto-replies when you\'re busy tattooing.', tool: 'One-Box' },
+        { id: 'cbc-4', name: 'Automate post-session review requests', desc: 'Automatically ask for Google reviews after every appointment while the experience is fresh.', tool: 'Reputation' },
+      ],
+    },
+    {
+      id: 'get-paid-faster',
+      icon: '&#128176;',
+      title: 'Get Paid Faster',
+      desc: 'Streamline payments — deposits, invoicing, and instant text-to-pay.',
+      tools: ['appointments', 'text-to-pay', 'payments'],
+      tasks: [
+        { id: 'gpf-1', name: 'Enable online booking with deposits', desc: 'Require deposits at booking time to reduce no-shows and secure revenue.', tool: 'Appointments' },
+        { id: 'gpf-2', name: 'Set up Text-to-Pay', desc: 'Send payment links via SMS so clients can pay instantly from their phone.', tool: 'Text-to-Pay' },
+        { id: 'gpf-3', name: 'Connect payment processing', desc: 'Link your bank account and set up credit card processing.', tool: 'Payments' },
+        { id: 'gpf-4', name: 'Configure auto-invoicing', desc: 'Automatically send invoices and receipts after appointments.', tool: 'Appointments' },
+      ],
+    },
+    {
+      id: 'save-time',
+      icon: '&#9200;',
+      title: 'Save Time',
+      desc: 'Automate the busywork — posting, follow-ups, and client communication.',
+      tools: ['post-scheduler', 'one-box', 'email-marketing'],
+      tasks: [
+        { id: 'st-1', name: 'Schedule your first week of posts', desc: 'Queue up social media posts so you never miss a day.', tool: 'Post Scheduler' },
+        { id: 'st-2', name: 'Set up auto-replies in One-Box', desc: 'Configure after-hours messages and quick replies for common questions.', tool: 'One-Box' },
+        { id: 'st-3', name: 'Create email automation sequences', desc: 'Build a post-appointment follow-up sequence that runs on autopilot.', tool: 'Email Marketing' },
+        { id: 'st-4', name: 'Enable appointment reminders', desc: 'Reduce no-shows with automated text and email reminders.', tool: 'Calendars' },
+      ],
+    },
+    {
+      id: 'grow-team',
+      icon: '&#129309;',
+      title: 'Grow Your Team',
+      desc: 'Recruit talent, manage multiple artists, and scale your studio.',
+      tools: ['multi-artist', 'recruiting', 'business-plan'],
+      tasks: [
+        { id: 'gt-1', name: 'Set up multi-artist management', desc: 'Add your team members with individual calendars and permissions.', tool: 'Multi-Artist' },
+        { id: 'gt-2', name: 'Create artist profiles', desc: 'Build portfolio pages for each artist to attract their ideal clients.', tool: 'Website Builder' },
+        { id: 'gt-3', name: 'Explore artist recruiting services', desc: 'Connect with TattooNOW\'s placement network to find new talent.', tool: 'Recruiting' },
+        { id: 'gt-4', name: 'Draft your studio business plan', desc: 'Use the Living Business Plan template to set goals and benchmarks.', tool: 'Business Plan' },
+      ],
+    },
+    {
+      id: 'level-up',
+      icon: '&#127942;',
+      title: 'Level Up My Business',
+      desc: 'Expert consulting, education, and strategic business planning.',
+      tools: ['roundtable', 'consulting', 'courses', 'business-plan'],
+      tasks: [
+        { id: 'lu-1', name: 'Join the Business Roundtable', desc: 'RSVP for the weekly session with industry peers and experts.', tool: 'Roundtable' },
+        { id: 'lu-2', name: 'Schedule your 1-on-1 consult', desc: 'Book your initial consultation with a TattooNOW business expert.', tool: 'Consulting' },
+        { id: 'lu-3', name: 'Explore RIT courses', desc: 'Browse professional development courses tailored for tattooers.', tool: 'Courses' },
+        { id: 'lu-4', name: 'Start your Living Business Plan', desc: 'Begin building your roadmap for growth with guided templates.', tool: 'Business Plan' },
+      ],
+    },
+  ];
 
-  // Fire webhook for priority selection
-  sendWebhook('priorities_selected', {
-    priorities: selectedBenefits,
-    priorityDetails: selectedBenefits.map(id => {
-      const b = BENEFITS.find(x => x.id === id);
-      return { id: b.id, title: b.title, tools: b.tools };
-    }),
-  });
-}
+  // ── State ───────────────────────────────────────────────────
+  var currentScreen = 0;
+  var selectedBenefits = [];
+  var completedTasks = {};
 
-// ── Render: Task List ───────────────────────────────────────
-function renderTaskList() {
-  const container = document.getElementById('taskList');
-  container.innerHTML = '';
+  var STORAGE_KEY = 'tattoonow_onboarding_' + (LOCATION_ID || 'default');
 
-  // Build tasks grouped by selected benefits (in priority order)
-  let totalTasks = 0;
-  let doneTasks = 0;
+  function loadState() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (saved) {
+        if (saved.selectedBenefits) selectedBenefits = saved.selectedBenefits;
+        if (saved.completedTasks) completedTasks = saved.completedTasks;
+        if (saved.contactName) document.getElementById('contactName').value = saved.contactName;
+        if (saved.businessName) document.getElementById('businessName').value = saved.businessName;
+        if (saved.contactEmail) document.getElementById('contactEmail').value = saved.contactEmail;
+        if (saved.contactPhone) document.getElementById('contactPhone').value = saved.contactPhone;
+        if (saved.currentScreen !== undefined) currentScreen = saved.currentScreen;
+      }
+    } catch (e) { /* ignore */ }
+  }
 
-  selectedBenefits.forEach(benefitId => {
-    const benefit = BENEFITS.find(b => b.id === benefitId);
-    if (!benefit) return;
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        selectedBenefits: selectedBenefits,
+        completedTasks: completedTasks,
+        contactName: document.getElementById('contactName').value,
+        businessName: document.getElementById('businessName').value,
+        contactEmail: document.getElementById('contactEmail').value,
+        contactPhone: document.getElementById('contactPhone').value,
+        currentScreen: currentScreen,
+      }));
+    } catch (e) { /* ignore */ }
+  }
 
-    const group = document.createElement('div');
-    group.className = 'task-group';
+  // ── Render: Progress Bar ────────────────────────────────────
+  function renderProgressBar() {
+    var bar = document.getElementById('progressBar');
+    var labels = ['Welcome', 'Priorities', 'Tasks', 'Complete'];
+    bar.innerHTML = '';
+    labels.forEach(function(label, i) {
+      var isCompleted = i < currentScreen;
+      var isActive = i === currentScreen;
 
-    const header = document.createElement('div');
-    header.className = 'task-group-header';
-    header.innerHTML = `
-      <span class="task-group-icon">${benefit.icon}</span>
-      <span class="task-group-title">${benefit.title}</span>
-    `;
-    group.appendChild(header);
+      var step = document.createElement('div');
+      step.className = 'progress-step';
 
-    benefit.tasks.forEach(task => {
-      totalTasks++;
-      const isDone = !!completedTasks[task.id];
-      if (isDone) doneTasks++;
+      var dot = document.createElement('div');
+      dot.className = 'progress-dot' + (isActive ? ' active' : '') + (isCompleted ? ' completed' : '');
+      dot.textContent = isCompleted ? '\u2713' : (i + 1);
+      dot.title = label;
+      step.appendChild(dot);
 
-      const item = document.createElement('div');
-      item.className = 'task-item' + (isDone ? ' completed' : '');
-      item.innerHTML = `
-        <div class="task-checkbox" onclick="toggleTask('${task.id}', event)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
-        </div>
-        <div class="task-content">
-          <div class="task-name">${task.name}</div>
-          <div class="task-desc">${task.desc} <em style="color:var(--accent);">[${task.tool}]</em></div>
-        </div>
-        <span class="task-status-badge ${isDone ? 'done' : 'pending'}">${isDone ? 'Done' : 'To Do'}</span>
-      `;
-      group.appendChild(item);
-    });
+      if (i < labels.length - 1) {
+        var line = document.createElement('div');
+        line.className = 'progress-line' + (isCompleted ? ' completed' : '');
+        step.appendChild(line);
+      }
 
-    container.appendChild(group);
-  });
-
-  // Enable finish button only if at least 1 task is done
-  document.getElementById('tasksNext').disabled = doneTasks === 0;
-}
-
-function toggleTask(taskId, event) {
-  event.stopPropagation();
-  if (completedTasks[taskId]) {
-    delete completedTasks[taskId];
-  } else {
-    completedTasks[taskId] = true;
-    // Fire webhook for task completion
-    const allTasks = selectedBenefits.flatMap(bId => (BENEFITS.find(b => b.id === bId) || {}).tasks || []);
-    const task = allTasks.find(t => t.id === taskId);
-    sendWebhook('task_completed', {
-      taskId,
-      taskName: task ? task.name : taskId,
-      tool: task ? task.tool : '',
-      completedCount: Object.keys(completedTasks).length,
-      totalCount: allTasks.length,
+      bar.appendChild(step);
     });
   }
-  saveState();
-  renderTaskList();
-}
 
-// ── Navigation ──────────────────────────────────────────────
-function goToScreen(index) {
-  // Validate welcome screen before moving forward
-  if (currentScreen === 0 && index > 0) {
-    const name = document.getElementById('contactName').value.trim();
-    const business = document.getElementById('businessName').value.trim();
-    const email = document.getElementById('contactEmail').value.trim();
-    if (!name || !business || !email) {
-      showToast('Please fill in your name, business name, and email.');
+  // ── Render: Benefit Grid ────────────────────────────────────
+  function renderBenefitGrid() {
+    var grid = document.getElementById('benefitGrid');
+    grid.innerHTML = '';
+
+    BENEFITS.forEach(function(b) {
+      var idx = selectedBenefits.indexOf(b.id);
+      var isSelected = idx !== -1;
+
+      var card = document.createElement('div');
+      card.className = 'benefit-card' + (isSelected ? ' selected' : '');
+      card.onclick = function() { toggleBenefit(b.id); };
+      card.innerHTML =
+        '<div class="badge">' + (isSelected ? idx + 1 : '') + '</div>' +
+        '<div class="benefit-icon">' + b.icon + '</div>' +
+        '<div class="benefit-title">' + b.title + '</div>' +
+        '<div class="benefit-desc">' + b.desc + '</div>';
+      grid.appendChild(card);
+    });
+
+    document.getElementById('prioritiesNext').disabled = selectedBenefits.length === 0;
+  }
+
+  function toggleBenefit(id) {
+    var idx = selectedBenefits.indexOf(id);
+    if (idx !== -1) {
+      selectedBenefits.splice(idx, 1);
+    } else if (selectedBenefits.length < CONFIG.maxPriorities) {
+      selectedBenefits.push(id);
+    }
+    saveState();
+    renderBenefitGrid();
+  }
+
+  function confirmPriorities() {
+    if (selectedBenefits.length === 0) return;
+    renderTaskList();
+    goToScreen(2);
+
+    var priorityData = {
+      priorities: selectedBenefits,
+      priorityDetails: selectedBenefits.map(function(id) {
+        var b = BENEFITS.find(function(x) { return x.id === id; });
+        return { id: b.id, title: b.title, tools: b.tools };
+      }),
+    };
+    sendWebhook('priorities_selected', priorityData);
+    notifyParent('priorities_selected', priorityData);
+  }
+
+  // ── Render: Task List ───────────────────────────────────────
+  function renderTaskList() {
+    var container = document.getElementById('taskList');
+    container.innerHTML = '';
+
+    var totalTasks = 0;
+    var doneTasks = 0;
+
+    selectedBenefits.forEach(function(benefitId) {
+      var benefit = BENEFITS.find(function(b) { return b.id === benefitId; });
+      if (!benefit) return;
+
+      var group = document.createElement('div');
+      group.className = 'task-group';
+
+      var header = document.createElement('div');
+      header.className = 'task-group-header';
+      header.innerHTML =
+        '<span class="task-group-icon">' + benefit.icon + '</span>' +
+        '<span class="task-group-title">' + benefit.title + '</span>';
+      group.appendChild(header);
+
+      benefit.tasks.forEach(function(task) {
+        totalTasks++;
+        var isDone = !!completedTasks[task.id];
+        if (isDone) doneTasks++;
+
+        var item = document.createElement('div');
+        item.className = 'task-item' + (isDone ? ' completed' : '');
+        item.innerHTML =
+          '<div class="task-checkbox" onclick="tnowToggleTask(\'' + task.id + '\', event)">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>' +
+          '</div>' +
+          '<div class="task-content">' +
+            '<div class="task-name">' + task.name + '</div>' +
+            '<div class="task-desc">' + task.desc + ' <em style="color:var(--tnow-accent);">[' + task.tool + ']</em></div>' +
+          '</div>' +
+          '<span class="task-status-badge ' + (isDone ? 'done' : 'pending') + '">' + (isDone ? 'Done' : 'To Do') + '</span>';
+        group.appendChild(item);
+      });
+
+      container.appendChild(group);
+    });
+
+    document.getElementById('tasksNext').disabled = doneTasks === 0;
+  }
+
+  function toggleTask(taskId, event) {
+    event.stopPropagation();
+    if (completedTasks[taskId]) {
+      delete completedTasks[taskId];
+    } else {
+      completedTasks[taskId] = true;
+      var allTasks = getAllTasks();
+      var task = allTasks.find(function(t) { return t.id === taskId; });
+      var taskData = {
+        taskId: taskId,
+        taskName: task ? task.name : taskId,
+        tool: task ? task.tool : '',
+        completedCount: Object.keys(completedTasks).length,
+        totalCount: allTasks.length,
+      };
+      sendWebhook('task_completed', taskData);
+      notifyParent('task_completed', taskData);
+    }
+    saveState();
+    renderTaskList();
+  }
+
+  function getAllTasks() {
+    var tasks = [];
+    selectedBenefits.forEach(function(bId) {
+      var b = BENEFITS.find(function(x) { return x.id === bId; });
+      if (b) tasks = tasks.concat(b.tasks);
+    });
+    return tasks;
+  }
+
+  // ── Navigation ──────────────────────────────────────────────
+  function goToScreen(index) {
+    if (currentScreen === 0 && index > 0) {
+      var name = document.getElementById('contactName').value.trim();
+      var business = document.getElementById('businessName').value.trim();
+      var email = document.getElementById('contactEmail').value.trim();
+      if (!name || !business || !email) {
+        showToast('Please fill in your name, business name, and email.');
+        return;
+      }
+    }
+
+    currentScreen = index;
+
+    CONFIG.screens.forEach(function(id, i) {
+      var el = document.getElementById(id);
+      el.classList.toggle('active', i === index);
+    });
+
+    if (index === 3) {
+      populateSummary();
+    }
+
+    saveState();
+    renderProgressBar();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Summary Screen ──────────────────────────────────────────
+  function populateSummary() {
+    var name = document.getElementById('contactName').value.trim();
+    var business = document.getElementById('businessName').value.trim();
+    var email = document.getElementById('contactEmail').value.trim();
+    var phone = document.getElementById('contactPhone').value.trim();
+
+    document.getElementById('summaryBusiness').textContent = business || '—';
+    document.getElementById('summaryContact').textContent =
+      [name, email, phone].filter(Boolean).join(' \u2022 ');
+
+    var priContainer = document.getElementById('summaryPriorities');
+    priContainer.innerHTML = '';
+    selectedBenefits.forEach(function(id) {
+      var b = BENEFITS.find(function(x) { return x.id === id; });
+      if (!b) return;
+      var tag = document.createElement('span');
+      tag.className = 'summary-tag';
+      tag.innerHTML = b.icon + ' ' + b.title;
+      priContainer.appendChild(tag);
+    });
+
+    var allTasks = getAllTasks();
+    var done = allTasks.filter(function(t) { return completedTasks[t.id]; }).length;
+    document.getElementById('summaryProgress').textContent =
+      done + ' of ' + allTasks.length + ' tasks completed';
+  }
+
+  // ── Submit Final Onboarding ─────────────────────────────────
+  function submitOnboarding() {
+    var allTasks = getAllTasks();
+    var done = allTasks.filter(function(t) { return completedTasks[t.id]; }).length;
+
+    var payload = {
+      locationId: LOCATION_ID,
+      packageType: PACKAGE_TYPE,
+      contactName: document.getElementById('contactName').value.trim(),
+      businessName: document.getElementById('businessName').value.trim(),
+      contactEmail: document.getElementById('contactEmail').value.trim(),
+      contactPhone: document.getElementById('contactPhone').value.trim(),
+      priorities: selectedBenefits.map(function(id) {
+        var b = BENEFITS.find(function(x) { return x.id === id; });
+        return { id: b.id, title: b.title, tools: b.tools };
+      }),
+      completedTasks: allTasks.map(function(t) {
+        return {
+          id: t.id,
+          name: t.name,
+          tool: t.tool,
+          completed: !!completedTasks[t.id],
+        };
+      }),
+      completionRate: allTasks.length > 0 ? Math.round((done / allTasks.length) * 100) : 0,
+      submittedAt: new Date().toISOString(),
+    };
+
+    sendWebhook('onboarding_complete', payload);
+    notifyParent('onboarding_complete', payload);
+    showToast('Onboarding submitted! Your TattooNOW specialist will be in touch soon.');
+  }
+
+  // ── Webhook ─────────────────────────────────────────────────
+  function sendWebhook(event, data) {
+    var statusEl = document.getElementById('webhookStatus');
+
+    var payload = {
+      event: event,
+      locationId: LOCATION_ID,
+      packageType: PACKAGE_TYPE,
+      timestamp: new Date().toISOString(),
+      data: data,
+    };
+
+    console.log('[TattooNOW Onboarding Webhook]', event, payload);
+
+    if (!CONFIG.webhookUrl) {
+      if (statusEl) statusEl.textContent = 'Webhook URL not configured — data logged to console.';
       return;
     }
-  }
 
-  currentScreen = index;
-
-  CONFIG.screens.forEach((id, i) => {
-    const el = document.getElementById(id);
-    el.classList.toggle('active', i === index);
-  });
-
-  // Populate summary if going to complete screen
-  if (index === 3) {
-    populateSummary();
-  }
-
-  saveState();
-  renderProgressBar();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// ── Summary Screen ──────────────────────────────────────────
-function populateSummary() {
-  const name = document.getElementById('contactName').value.trim();
-  const business = document.getElementById('businessName').value.trim();
-  const email = document.getElementById('contactEmail').value.trim();
-  const phone = document.getElementById('contactPhone').value.trim();
-
-  document.getElementById('summaryBusiness').textContent = business || '—';
-  document.getElementById('summaryContact').textContent =
-    [name, email, phone].filter(Boolean).join(' \u2022 ');
-
-  // Priorities
-  const priContainer = document.getElementById('summaryPriorities');
-  priContainer.innerHTML = '';
-  selectedBenefits.forEach(id => {
-    const b = BENEFITS.find(x => x.id === id);
-    if (!b) return;
-    const tag = document.createElement('span');
-    tag.className = 'summary-tag';
-    tag.innerHTML = `${b.icon} ${b.title}`;
-    priContainer.appendChild(tag);
-  });
-
-  // Progress
-  const allTasks = selectedBenefits.flatMap(bId => (BENEFITS.find(b => b.id === bId) || {}).tasks || []);
-  const done = allTasks.filter(t => completedTasks[t.id]).length;
-  document.getElementById('summaryProgress').textContent =
-    `${done} of ${allTasks.length} tasks completed`;
-}
-
-// ── Submit Final Onboarding ─────────────────────────────────
-function submitOnboarding() {
-  const allTasks = selectedBenefits.flatMap(bId => (BENEFITS.find(b => b.id === bId) || {}).tasks || []);
-  const done = allTasks.filter(t => completedTasks[t.id]).length;
-
-  const payload = {
-    locationId: LOCATION_ID,
-    packageType: PACKAGE_TYPE,
-    contactName: document.getElementById('contactName').value.trim(),
-    businessName: document.getElementById('businessName').value.trim(),
-    contactEmail: document.getElementById('contactEmail').value.trim(),
-    contactPhone: document.getElementById('contactPhone').value.trim(),
-    priorities: selectedBenefits.map(id => {
-      const b = BENEFITS.find(x => x.id === id);
-      return { id: b.id, title: b.title, tools: b.tools };
-    }),
-    completedTasks: allTasks.map(t => ({
-      id: t.id,
-      name: t.name,
-      tool: t.tool,
-      completed: !!completedTasks[t.id],
-    })),
-    completionRate: allTasks.length > 0 ? Math.round((done / allTasks.length) * 100) : 0,
-    submittedAt: new Date().toISOString(),
-  };
-
-  sendWebhook('onboarding_complete', payload);
-  showToast('Onboarding submitted! Your TattooNOW specialist will be in touch soon.');
-}
-
-// ── Webhook ─────────────────────────────────────────────────
-async function sendWebhook(event, data) {
-  const statusEl = document.getElementById('webhookStatus');
-
-  const payload = {
-    event,
-    locationId: LOCATION_ID,
-    packageType: PACKAGE_TYPE,
-    timestamp: new Date().toISOString(),
-    data,
-  };
-
-  // Log to console for development / debugging
-  console.log('[TattooNOW Onboarding Webhook]', event, payload);
-
-  if (!CONFIG.webhookUrl) {
-    if (statusEl) statusEl.textContent = 'Webhook URL not configured — data logged to console.';
-    return;
-  }
-
-  try {
-    const resp = await fetch(CONFIG.webhookUrl, {
+    fetch(CONFIG.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    }).then(function(resp) {
+      if (resp.ok) {
+        if (statusEl) statusEl.textContent = 'Data synced successfully.';
+      } else {
+        if (statusEl) statusEl.textContent = 'Sync warning: server responded ' + resp.status;
+        console.warn('[Webhook] Non-OK response:', resp.status);
+      }
+    }).catch(function(err) {
+      if (statusEl) statusEl.textContent = 'Sync offline — data saved locally.';
+      console.warn('[Webhook] Failed to send:', err);
     });
-
-    if (resp.ok) {
-      if (statusEl) statusEl.textContent = 'Data synced successfully.';
-    } else {
-      if (statusEl) statusEl.textContent = 'Sync warning: server responded ' + resp.status;
-      console.warn('[Webhook] Non-OK response:', resp.status);
-    }
-  } catch (err) {
-    if (statusEl) statusEl.textContent = 'Sync offline — data saved locally.';
-    console.warn('[Webhook] Failed to send:', err);
   }
-}
 
-// ── Toast ───────────────────────────────────────────────────
-function showToast(message) {
-  const toast = document.getElementById('toast');
-  toast.textContent = message;
-  toast.classList.add('visible');
-  setTimeout(() => toast.classList.remove('visible'), 4000);
-}
+  // ── Toast ───────────────────────────────────────────────────
+  function showToast(message) {
+    var toast = document.getElementById('tnowToast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('visible');
+    setTimeout(function() { toast.classList.remove('visible'); }, 4000);
+  }
 
-// ── PostMessage API (for parent page communication) ────────
-// The parent page can listen for progress updates
-function notifyParent(event, data) {
-  try {
-    window.parent.postMessage({
-      source: 'tattoonow-onboarding',
-      event,
-      locationId: LOCATION_ID,
-      data,
-    }, '*');
-  } catch (e) { /* not in iframe or blocked */ }
-}
+  // ── PostMessage API (for parent page communication) ────────
+  function notifyParent(event, data) {
+    try {
+      window.parent.postMessage({
+        source: 'tattoonow-onboarding',
+        event: event,
+        locationId: LOCATION_ID,
+        data: data,
+      }, '*');
+    } catch (e) { /* not in iframe or blocked */ }
+  }
 
-// ── Initialize ──────────────────────────────────────────────
-loadState();
-renderProgressBar();
-renderBenefitGrid();
-if (selectedBenefits.length > 0) {
-  renderTaskList();
-}
-// If restored to a screen beyond welcome, go there
-if (currentScreen > 0) {
-  goToScreen(currentScreen);
-}
+  // ── Expose global functions for onclick handlers ────────────
+  window.tnowGoToScreen = goToScreen;
+  window.tnowConfirmPriorities = confirmPriorities;
+  window.tnowToggleTask = toggleTask;
+  window.tnowSubmitOnboarding = submitOnboarding;
+
+  // ── Initialize ──────────────────────────────────────────────
+  loadState();
+  renderProgressBar();
+  renderBenefitGrid();
+  if (selectedBenefits.length > 0) {
+    renderTaskList();
+  }
+  if (currentScreen > 0) {
+    goToScreen(currentScreen);
+  }
+})();
 </script>
 
 </body>
