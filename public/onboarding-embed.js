@@ -9,7 +9,7 @@
  *
  *   <div id="tnow-onboarding-loader"></div>
  *   <script>
- *   fetch('https://tn.reinventingai.com/webhook/YOUR_WEBHOOK_ID?file=onboarding')
+ *   fetch('https://tn.reinventingai.com/webhook/tattoonow-onboarding?file=onboarding')
  *     .then(function(r) { return r.text(); })
  *     .then(function(html) {
  *       var c = document.getElementById('tnow-onboarding-loader');
@@ -28,7 +28,7 @@
  *   <script>
  *     window.TattooNOWOnboardingConfig = {
  *       // REQUIRED: URL that returns the onboarding HTML
- *       fetchUrl: 'https://tn.reinventingai.com/webhook/YOUR_WEBHOOK_ID?file=onboarding',
+ *       fetchUrl: 'https://tn.reinventingai.com/webhook/tattoonow-onboarding?file=onboarding',
  *       // Optional overrides:
  *       containerId: 'tnow-onboarding-loader',  // default
  *       webhookUrl: '',                           // n8n webhook for form submissions
