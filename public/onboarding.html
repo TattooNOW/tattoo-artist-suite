@@ -372,6 +372,79 @@
     color: var(--tnow-success);
   }
 
+  /* ── Setup Instructions Tooltip ─────────────────────── */
+  .tnow-onboarding .setup-info-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid var(--tnow-accent);
+    background: transparent;
+    color: var(--tnow-accent);
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    position: relative;
+    font-family: var(--tnow-font-body);
+    line-height: 1;
+    padding: 0;
+    margin-left: 0.25rem;
+  }
+  .tnow-onboarding .setup-info-btn:hover {
+    background: var(--tnow-accent);
+    color: var(--tnow-bg);
+  }
+  .tnow-onboarding .setup-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    right: -8px;
+    width: 280px;
+    background: var(--tnow-surface);
+    border: 1px solid var(--tnow-accent);
+    border-radius: var(--tnow-radius);
+    padding: 0.75rem 0.85rem;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    animation: tnowTooltipIn 0.15s ease-out;
+  }
+  .tnow-onboarding .setup-tooltip.visible {
+    display: block;
+  }
+  @keyframes tnowTooltipIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .tnow-onboarding .setup-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    right: 14px;
+    width: 10px;
+    height: 10px;
+    background: var(--tnow-surface);
+    border-right: 1px solid var(--tnow-accent);
+    border-bottom: 1px solid var(--tnow-accent);
+    transform: rotate(45deg);
+  }
+  .tnow-onboarding .setup-tooltip-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--tnow-accent);
+    margin-bottom: 0.35rem;
+  }
+  .tnow-onboarding .setup-tooltip-text {
+    font-size: 0.78rem;
+    color: var(--tnow-fg);
+    line-height: 1.5;
+  }
+
   /* ── Contact Info Form ─────────────────────────────── */
   .tnow-onboarding .form-group {
     margin-bottom: 1.25rem;
@@ -768,10 +841,10 @@
       desc: 'Boost your visibility online and attract new business consistently.',
       tools: ['website', 'reputation', 'post-scheduler', 'email-marketing'],
       tasks: [
-        { id: 'gmc-1', name: 'Launch your portfolio website', desc: 'Publish a search-engine-optimized portfolio site showcasing your work.', tool: 'Website Builder' },
-        { id: 'gmc-2', name: 'Set up reputation management', desc: 'Automate Google review requests after every appointment.', tool: 'Reputation' },
-        { id: 'gmc-3', name: 'Connect social media accounts', desc: 'Link Instagram, Facebook, and TikTok for auto-posting.', tool: 'Post Scheduler' },
-        { id: 'gmc-4', name: 'Create your first email campaign', desc: 'Draft a welcome email or flash sale announcement for your list.', tool: 'Email Marketing' },
+        { id: 'gmc-1', name: 'Launch your portfolio website', desc: 'Publish a search-engine-optimized portfolio site showcasing your work.', tool: 'Website Builder', setup: 'Go to Sites > New Website. Choose a portfolio template, upload your best 10-15 photos, add your bio and contact info, then hit Publish.' },
+        { id: 'gmc-2', name: 'Set up reputation management', desc: 'Automate Google review requests after every appointment.', tool: 'Reputation', setup: 'Go to Reputation > Settings. Connect your Google Business Profile, customize the review request message, and enable auto-send after appointments.' },
+        { id: 'gmc-3', name: 'Connect social media accounts', desc: 'Link Instagram, Facebook, and TikTok for auto-posting.', tool: 'Post Scheduler', setup: 'Go to Marketing > Social Planner > Settings. Click Connect Account for each platform and follow the login prompts to authorize access.' },
+        { id: 'gmc-4', name: 'Create your first email campaign', desc: 'Draft a welcome email or flash sale announcement for your list.', tool: 'Email Marketing', setup: 'Go to Marketing > Emails > Create Campaign. Pick a template, add your subject line and body text, select your audience, and schedule or send.' },
       ],
     },
     {
@@ -781,10 +854,10 @@
       desc: 'Build proper sales funnels that capture every inquiry and convert them into booked clients.',
       tools: ['funnels', 'crm', 'one-box', 'ivr'],
       tasks: [
-        { id: 'nml-1', name: 'Create your lead capture funnel', desc: 'Build a sales funnel that turns website visitors and social traffic into booked consultations.', tool: 'Sales Funnels' },
-        { id: 'nml-2', name: 'Set up automated follow-up sequences', desc: 'Configure nurture sequences so no lead goes cold — texts, emails, and reminders on autopilot.', tool: 'Sales Funnels' },
-        { id: 'nml-3', name: 'Import your client list to CRM', desc: 'Upload existing contacts and tag them so no one falls through the cracks.', tool: 'CRM' },
-        { id: 'nml-4', name: 'Activate One-Box unified inbox', desc: 'Connect calls, texts, DMs, and emails into a single view so you never miss an inquiry.', tool: 'One-Box' },
+        { id: 'nml-1', name: 'Create your lead capture funnel', desc: 'Build a sales funnel that turns website visitors and social traffic into booked consultations.', tool: 'Sales Funnels', setup: 'Go to Sites > Funnels > Create Funnel. Select the Tattoo Consultation template, customize the form fields (name, email, style preference), and publish.' },
+        { id: 'nml-2', name: 'Set up automated follow-up sequences', desc: 'Configure nurture sequences so no lead goes cold — texts, emails, and reminders on autopilot.', tool: 'Sales Funnels', setup: 'Go to Automation > Workflows > Create Workflow. Use the Lead Follow-Up template — set triggers for new contact, add SMS + email steps with wait times.' },
+        { id: 'nml-3', name: 'Import your client list to CRM', desc: 'Upload existing contacts and tag them so no one falls through the cracks.', tool: 'CRM', setup: 'Go to Contacts > Import. Download the CSV template, fill in your client names/emails/phones, upload the file, and map the columns. Tag imported contacts.' },
+        { id: 'nml-4', name: 'Activate One-Box unified inbox', desc: 'Connect calls, texts, DMs, and emails into a single view so you never miss an inquiry.', tool: 'One-Box', setup: 'Go to Conversations > Settings. Connect your phone number (or get a new one), link your email, and connect Facebook/Instagram DMs under Integrations.' },
       ],
     },
     {
@@ -794,10 +867,10 @@
       desc: 'Professional scheduling, reminders, and client communication that keeps them coming back.',
       tools: ['calendars', 'one-box', 'reputation', 'appointments'],
       tasks: [
-        { id: 'cbc-1', name: 'Configure your booking calendar', desc: 'Set your availability and enable online booking with deposits — no more back-and-forth texting.', tool: 'Calendars' },
-        { id: 'cbc-2', name: 'Enable automated reminders', desc: 'Reduce no-shows with text and email reminders before every appointment.', tool: 'Calendars' },
-        { id: 'cbc-3', name: 'Set up two-way texting', desc: 'Give clients a professional way to reach you — with auto-replies when you\'re busy tattooing.', tool: 'One-Box' },
-        { id: 'cbc-4', name: 'Automate post-session review requests', desc: 'Automatically ask for Google reviews after every appointment while the experience is fresh.', tool: 'Reputation' },
+        { id: 'cbc-1', name: 'Configure your booking calendar', desc: 'Set your availability and enable online booking with deposits — no more back-and-forth texting.', tool: 'Calendars', setup: 'Go to Calendars > Calendar Settings. Set your working hours, appointment duration, and buffer time. Enable deposits under Payments tab and set the amount.' },
+        { id: 'cbc-2', name: 'Enable automated reminders', desc: 'Reduce no-shows with text and email reminders before every appointment.', tool: 'Calendars', setup: 'Go to Calendars > Notifications. Enable SMS and email reminders, set timing (e.g. 24hr and 1hr before), and customize the reminder message text.' },
+        { id: 'cbc-3', name: 'Set up two-way texting', desc: 'Give clients a professional way to reach you — with auto-replies when you\'re busy tattooing.', tool: 'One-Box', setup: 'Go to Conversations > Settings > Auto-Reply. Set your business hours, write an after-hours auto-reply message, and enable the missed-call text-back.' },
+        { id: 'cbc-4', name: 'Automate post-session review requests', desc: 'Automatically ask for Google reviews after every appointment while the experience is fresh.', tool: 'Reputation', setup: 'Go to Automation > Workflows > Create. Trigger: Appointment Status Changed to "Completed". Action: Send review request SMS with your Google review link.' },
       ],
     },
     {
@@ -807,10 +880,10 @@
       desc: 'Streamline payments — deposits, invoicing, and instant text-to-pay.',
       tools: ['appointments', 'text-to-pay', 'payments'],
       tasks: [
-        { id: 'gpf-1', name: 'Enable online booking with deposits', desc: 'Require deposits at booking time to reduce no-shows and secure revenue.', tool: 'Appointments' },
-        { id: 'gpf-2', name: 'Set up Text-to-Pay', desc: 'Send payment links via SMS so clients can pay instantly from their phone.', tool: 'Text-to-Pay' },
-        { id: 'gpf-3', name: 'Connect payment processing', desc: 'Link your bank account and set up credit card processing.', tool: 'Payments' },
-        { id: 'gpf-4', name: 'Configure auto-invoicing', desc: 'Automatically send invoices and receipts after appointments.', tool: 'Appointments' },
+        { id: 'gpf-1', name: 'Enable online booking with deposits', desc: 'Require deposits at booking time to reduce no-shows and secure revenue.', tool: 'Appointments', setup: 'Go to Calendars > Calendar Settings > Payments. Toggle on "Require deposit", set the amount (e.g. $50), and connect Stripe if not already linked.' },
+        { id: 'gpf-2', name: 'Set up Text-to-Pay', desc: 'Send payment links via SMS so clients can pay instantly from their phone.', tool: 'Text-to-Pay', setup: 'Go to Payments > Text-to-Pay. Connect your Stripe account, set a default payment message template, and test by sending yourself a payment link.' },
+        { id: 'gpf-3', name: 'Connect payment processing', desc: 'Link your bank account and set up credit card processing.', tool: 'Payments', setup: 'Go to Payments > Integrations. Click Connect Stripe, follow the setup wizard to enter your bank details and verify your identity. Takes about 5 minutes.' },
+        { id: 'gpf-4', name: 'Configure auto-invoicing', desc: 'Automatically send invoices and receipts after appointments.', tool: 'Appointments', setup: 'Go to Payments > Invoices > Settings. Enable auto-invoice on appointment completion, customize your invoice template with logo and terms, and set payment due date.' },
       ],
     },
     {
@@ -820,10 +893,10 @@
       desc: 'Automate the busywork — posting, follow-ups, and client communication.',
       tools: ['post-scheduler', 'one-box', 'email-marketing'],
       tasks: [
-        { id: 'st-1', name: 'Schedule your first week of posts', desc: 'Queue up social media posts so you never miss a day.', tool: 'Post Scheduler' },
-        { id: 'st-2', name: 'Set up auto-replies in One-Box', desc: 'Configure after-hours messages and quick replies for common questions.', tool: 'One-Box' },
-        { id: 'st-3', name: 'Create email automation sequences', desc: 'Build a post-appointment follow-up sequence that runs on autopilot.', tool: 'Email Marketing' },
-        { id: 'st-4', name: 'Enable appointment reminders', desc: 'Reduce no-shows with automated text and email reminders.', tool: 'Calendars' },
+        { id: 'st-1', name: 'Schedule your first week of posts', desc: 'Queue up social media posts so you never miss a day.', tool: 'Post Scheduler', setup: 'Go to Marketing > Social Planner. Click New Post, upload a photo, write a caption, select platforms, and pick a date/time. Repeat for 5-7 posts.' },
+        { id: 'st-2', name: 'Set up auto-replies in One-Box', desc: 'Configure after-hours messages and quick replies for common questions.', tool: 'One-Box', setup: 'Go to Conversations > Settings > Canned Responses. Create replies for common questions (pricing, hours, booking). Then set up auto-reply under Auto-Reply tab.' },
+        { id: 'st-3', name: 'Create email automation sequences', desc: 'Build a post-appointment follow-up sequence that runs on autopilot.', tool: 'Email Marketing', setup: 'Go to Automation > Workflows > Create. Trigger: Appointment Completed. Add email steps: thank-you (Day 0), aftercare tips (Day 3), review request (Day 7).' },
+        { id: 'st-4', name: 'Enable appointment reminders', desc: 'Reduce no-shows with automated text and email reminders.', tool: 'Calendars', setup: 'Go to Calendars > Notifications. Toggle on SMS and email reminders. Set to send 24 hours and 1 hour before each appointment. Customize message text.' },
       ],
     },
     {
@@ -833,10 +906,10 @@
       desc: 'Recruit talent, manage multiple artists, and scale your studio.',
       tools: ['multi-artist', 'recruiting', 'business-plan'],
       tasks: [
-        { id: 'gt-1', name: 'Set up multi-artist management', desc: 'Add your team members with individual calendars and permissions.', tool: 'Multi-Artist' },
-        { id: 'gt-2', name: 'Create artist profiles', desc: 'Build portfolio pages for each artist to attract their ideal clients.', tool: 'Website Builder' },
-        { id: 'gt-3', name: 'Explore artist recruiting services', desc: 'Connect with TattooNOW\'s placement network to find new talent.', tool: 'Recruiting' },
-        { id: 'gt-4', name: 'Draft your studio business plan', desc: 'Use the Living Business Plan template to set goals and benchmarks.', tool: 'Business Plan' },
+        { id: 'gt-1', name: 'Set up multi-artist management', desc: 'Add your team members with individual calendars and permissions.', tool: 'Multi-Artist', setup: 'Go to Settings > My Staff > Add Employee. Enter each artist\'s name and email. Assign their calendar and set permissions (what they can view/edit).' },
+        { id: 'gt-2', name: 'Create artist profiles', desc: 'Build portfolio pages for each artist to attract their ideal clients.', tool: 'Website Builder', setup: 'Go to Sites > Website > Add Page. Choose the Artist Profile template. Add artist photo, bio, specialty styles, and gallery images. Link from the main site.' },
+        { id: 'gt-3', name: 'Explore artist recruiting services', desc: 'Connect with TattooNOW\'s placement network to find new talent.', tool: 'Recruiting', setup: 'Visit the TattooNOW Recruiting portal from your dashboard. Fill out the studio profile, list open positions, and set your preferred styles and experience level.' },
+        { id: 'gt-4', name: 'Draft your studio business plan', desc: 'Use the Living Business Plan template to set goals and benchmarks.', tool: 'Business Plan', setup: 'Go to Tools > Business Plan. Open the Living Business Plan template. Complete each section: vision, revenue goals, team structure, and marketing strategy.' },
       ],
     },
     {
@@ -846,10 +919,10 @@
       desc: 'Expert consulting, education, and strategic business planning.',
       tools: ['roundtable', 'consulting', 'courses', 'business-plan'],
       tasks: [
-        { id: 'lu-1', name: 'Join the Business Roundtable', desc: 'RSVP for the weekly session with industry peers and experts.', tool: 'Roundtable' },
-        { id: 'lu-2', name: 'Schedule your 1-on-1 consult', desc: 'Book your initial consultation with a TattooNOW business expert.', tool: 'Consulting' },
-        { id: 'lu-3', name: 'Explore RIT courses', desc: 'Browse professional development courses tailored for tattooers.', tool: 'Courses' },
-        { id: 'lu-4', name: 'Start your Living Business Plan', desc: 'Begin building your roadmap for growth with guided templates.', tool: 'Business Plan' },
+        { id: 'lu-1', name: 'Join the Business Roundtable', desc: 'RSVP for the weekly session with industry peers and experts.', tool: 'Roundtable', setup: 'Go to Tools > Roundtable. View the upcoming session schedule, click RSVP on the next available date, and add it to your calendar.' },
+        { id: 'lu-2', name: 'Schedule your 1-on-1 consult', desc: 'Book your initial consultation with a TattooNOW business expert.', tool: 'Consulting', setup: 'Go to Tools > Consulting. Browse available consultants, pick a time slot that works for you, and book your session. Prepare a list of questions beforehand.' },
+        { id: 'lu-3', name: 'Explore RIT courses', desc: 'Browse professional development courses tailored for tattooers.', tool: 'Courses', setup: 'Go to Tools > Courses. Browse the course library by category (business, marketing, technique). Enroll in a course and start with the first module.' },
+        { id: 'lu-4', name: 'Start your Living Business Plan', desc: 'Begin building your roadmap for growth with guided templates.', tool: 'Business Plan', setup: 'Go to Tools > Business Plan. Click Start New Plan, answer the guided prompts about your studio goals, and save your draft. Revisit monthly to update progress.' },
       ],
     },
   ];
@@ -1153,12 +1226,24 @@
 
         var item = document.createElement('div');
         item.className = 'task-item' + (isDone ? ' completed' : '');
+
+        var setupHtml = '';
+        if (task.setup) {
+          setupHtml =
+            '<button class="setup-info-btn" onclick="tnowToggleSetup(this, event)" title="Setup instructions">?'  +
+              '<div class="setup-tooltip">' +
+                '<div class="setup-tooltip-label">Setup Instructions</div>' +
+                '<div class="setup-tooltip-text">' + task.setup + '</div>' +
+              '</div>' +
+            '</button>';
+        }
+
         item.innerHTML =
           '<div class="task-checkbox" onclick="tnowToggleTask(\'' + task.id + '\', event)">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>' +
           '</div>' +
           '<div class="task-content">' +
-            '<div class="task-name">' + task.name + '</div>' +
+            '<div class="task-name">' + task.name + setupHtml + '</div>' +
             '<div class="task-desc">' + task.desc + ' <em style="color:var(--tnow-accent);">[' + task.tool + ']</em></div>' +
           '</div>' +
           '<span class="task-status-badge ' + (isDone ? 'done' : 'pending') + '">' + (isDone ? 'Done' : 'To Do') + '</span>';
@@ -1356,11 +1441,35 @@
     } catch (e) { /* not in iframe or blocked */ }
   }
 
+  // ── Setup Tooltip Toggle ────────────────────────────────────
+  function toggleSetup(btn, event) {
+    event.stopPropagation();
+    var tooltip = btn.querySelector('.setup-tooltip');
+    if (!tooltip) return;
+
+    // Close any other open tooltips first
+    document.querySelectorAll('.tnow-onboarding .setup-tooltip.visible').forEach(function(el) {
+      if (el !== tooltip) el.classList.remove('visible');
+    });
+
+    tooltip.classList.toggle('visible');
+  }
+
+  // Close tooltips when clicking elsewhere
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.setup-info-btn')) {
+      document.querySelectorAll('.tnow-onboarding .setup-tooltip.visible').forEach(function(el) {
+        el.classList.remove('visible');
+      });
+    }
+  });
+
   // ── Expose global functions for onclick handlers ────────────
   window.tnowGoToScreen = goToScreen;
   window.tnowConfirmPriorities = confirmPriorities;
   window.tnowToggleTask = toggleTask;
   window.tnowSubmitOnboarding = submitOnboarding;
+  window.tnowToggleSetup = toggleSetup;
 
   // ── Initialize ──────────────────────────────────────────────
   function initUI() {
@@ -1387,7 +1496,7 @@
             var existing = BENEFITS.find(function(b) { return b.id === sheetBenefit.id; });
             if (existing) {
               existing.title = sheetBenefit.title;
-              // Replace tasks with sheet versions (keeps desc, name, tool from sheet)
+              // Replace tasks with sheet versions (keeps desc, name, tool, setup from sheet)
               if (sheetBenefit.tasks && sheetBenefit.tasks.length > 0) {
                 existing.tasks = sheetBenefit.tasks;
               }
