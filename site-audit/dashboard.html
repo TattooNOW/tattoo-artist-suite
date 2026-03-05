@@ -1281,7 +1281,7 @@
     }
 
     /* ── Settings Panel ──────────────────────────────────── */
-    function SettingsPanel({ site, open, onClose, billingRecords, locationId, lastAuditDate, onAuditStarted }) {
+    function SettingsPanel({ site, open, onClose, billingRecords, usageLogs, locationId, lastAuditDate, onAuditStarted }) {
       const [saving, setSaving] = React.useState(false);
       const [saved, setSaved] = React.useState(false);
       const [auditStatus, setAuditStatus] = React.useState('idle');
@@ -1379,6 +1379,67 @@
             {auditStatus === 'running' ? 'Audit Running...' : 'Run Audit'}
           </button>
 
+          {/* ── Audit Receipts ─────────────────────────── */}
+          {billingRecords.length > 0 && (() => {
+            const logsByAudit = {};
+            usageLogs.forEach(l => {
+              const key = l.audit_id || 'unknown';
+              if (!logsByAudit[key]) logsByAudit[key] = [];
+              logsByAudit[key].push(l);
+            });
+
+            return (
+              <div style={{marginBottom:'1.5rem'}}>
+                <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Audit Receipts</h4>
+                {billingRecords.map(bill => {
+                  const logs = logsByAudit[bill.audit_id] || [];
+                  return (
+                    <div key={bill.id} style={{background:'#0a0a0a', border:'1px solid #222', borderRadius:'6px', padding:'0.75rem', marginBottom:'0.5rem'}}>
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: logs.length ? '0.5rem' : 0}}>
+                        <span style={{fontSize:'0.8rem', fontWeight:600}}>{bill.audit_date}</span>
+                        <span style={{fontSize:'0.8rem', fontWeight:700, color:'#4ade80'}}>${Number(bill.charge_amount || 0).toFixed(2)}</span>
+                      </div>
+                      {logs.length > 0 && (
+                        <div style={{borderTop:'1px solid #1a1a1a', paddingTop:'0.4rem'}}>
+                          {logs.map(l => (
+                            <div key={l.id} style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', color:'#888', padding:'0.15rem 0'}}>
+                              <span style={{display:'flex', alignItems:'center', gap:'0.3rem'}}>
+                                <span style={{width:'6px', height:'6px', borderRadius:'50%', background: l.status === 'success' ? '#4ade80' : l.status === 'error' ? '#f87171' : '#fbbf24', display:'inline-block'}} />
+                                {l.actor_name}
+                              </span>
+                              <span style={{display:'flex', gap:'0.75rem'}}>
+                                {l.items_returned != null && <span>{l.items_returned} items</span>}
+                                {l.duration_ms != null && <span>{(l.duration_ms/1000).toFixed(1)}s</span>}
+                                {l.cost_usd != null && <span>${Number(l.cost_usd).toFixed(4)}</span>}
+                              </span>
+                            </div>
+                          ))}
+                          <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', color:'#555', borderTop:'1px solid #1a1a1a', paddingTop:'0.3rem', marginTop:'0.3rem'}}>
+                            <span>{logs.length} search{logs.length !== 1 ? 'es' : ''}</span>
+                            <span>Cost: ${Number(bill.total_cost || 0).toFixed(4)}</span>
+                          </div>
+                        </div>
+                      )}
+                      {logs.length === 0 && bill.apify_runs && (
+                        <div style={{borderTop:'1px solid #1a1a1a', paddingTop:'0.4rem'}}>
+                          {(Array.isArray(bill.apify_runs) ? bill.apify_runs : []).map((r, i) => (
+                            <div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', color:'#888', padding:'0.15rem 0'}}>
+                              <span style={{display:'flex', alignItems:'center', gap:'0.3rem'}}>
+                                <span style={{width:'6px', height:'6px', borderRadius:'50%', background: r.status === 'success' ? '#4ade80' : '#fbbf24', display:'inline-block'}} />
+                                {r.actor || r.name || 'API call'}
+                              </span>
+                              <span>{r.items || 0} items</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           {/* ── Business Info ──────────────────────────── */}
           <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Business Info</h4>
           <div style={{marginBottom:'1rem'}}>
@@ -1465,6 +1526,7 @@
       const [competitors, setCompetitors] = React.useState([]);
       const [linkChecklist, setLinkChecklist] = React.useState([]);
       const [billingRecords, setBillingRecords] = React.useState([]);
+      const [usageLogs, setUsageLogs] = React.useState([]);
       const [activeTab, setActiveTab] = React.useState('overview');
       const [auditRunning, setAuditRunning] = React.useState(false);
       const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -1509,6 +1571,7 @@
               db.from('link_checklist').select('*').eq('site_id', siteData.id).order('priority', {ascending:true}),
               db.from('directory_listings').select('*').eq('site_id', siteData.id),
               db.from('audit_billing').select('*').eq('site_id', siteData.id).order('audit_date', {ascending:false}),
+              db.from('apify_usage_log').select('*').eq('site_id', siteData.id).order('created_at', {ascending:false}),
             ];
 
             const results = await Promise.allSettled(queries);
@@ -1524,6 +1587,7 @@
             setLinkChecklist(safe(results[6]));
             setDirectoryListings(safe(results[7]));
             setBillingRecords(safe(results[8]));
+            setUsageLogs(safe(results[9]));
           } catch (e) {
             console.error('Dashboard load error:', e);
             if (!canceled) setError(e);
@@ -1629,7 +1693,7 @@
               fontFamily:'Roboto, sans-serif', marginTop:'0.25rem', transition:'all 0.2s',
             }}>{settingsOpen ? 'Close' : 'Settings'}</button>
           </header>
-          <SettingsPanel site={site} open={settingsOpen} onClose={() => setSettingsOpen(false)} billingRecords={billingRecords} locationId={locationId} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} />
+          <SettingsPanel site={site} open={settingsOpen} onClose={() => setSettingsOpen(false)} billingRecords={billingRecords} usageLogs={usageLogs} locationId={locationId} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} />
 
           <nav className="tab-bar">
             {tabs.map(t => (
