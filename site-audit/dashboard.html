@@ -2803,11 +2803,11 @@
           }).catch(() => {});
         } catch (e) { /* fire and forget */ }
 
-        // Safety timeout — if no complete after 120s, reset
+        // Safety timeout — if no complete after 5 min, reset
         setTimeout(() => {
           if (channelRef.current) channelRef.current.unsubscribe();
           setState(prev => prev === 'fetching' ? 'error' : prev);
-        }, 120000);
+        }, 300000);
       };
 
       React.useEffect(() => {
