@@ -683,7 +683,7 @@
     }
 
     /* ── Tab: Overview ───────────────────────────────────── */
-    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, homepageSections, apifyResults, locationId, site, lastAuditDate, onAuditStarted, auditRunning }) {
+    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, homepageSections, apifyResults, locationId, site, lastAuditDate, onAuditStarted, auditRunning, onOpenAdmin }) {
       const seo = scores.seo?.score ?? '\u2014';
       const ai = scores.ai_discoverability?.score ?? '\u2014';
       const geo = scores.geo_readiness?.score ?? '\u2014';
@@ -691,8 +691,21 @@
 
       return (
         <div>
-          {/* Audit Run Card */}
-          <AuditRunCard locationId={locationId} site={site} lastAuditDate={lastAuditDate} onAuditStarted={onAuditStarted} auditRunning={auditRunning} />
+          {/* Run Audit — opens Admin panel to Runs tab */}
+          <div style={{textAlign:'center', marginBottom:'1.5rem'}}>
+            <button onClick={() => onOpenAdmin && onOpenAdmin('runs')} style={{
+              background: auditRunning ? '#333' : '#EA9320', color: auditRunning ? '#888' : '#000',
+              border: 'none', borderRadius: '8px', padding: '0.7rem 2rem', cursor: auditRunning ? 'wait' : 'pointer',
+              fontWeight: 700, fontSize: '0.95rem', fontFamily: 'Roboto, sans-serif',
+              boxShadow: auditRunning ? 'none' : '0 2px 8px rgba(234,147,32,0.3)',
+            }}>
+              {auditRunning ? 'Audit Running\u2026' : 'Run Full Audit'}
+            </button>
+            {!auditRunning && <div style={{fontSize:'0.75rem', color:'#555', marginTop:'0.5rem'}}>
+              {(site?.credits_remaining || 0)} credit{(site?.credits_remaining || 0) !== 1 ? 's' : ''} remaining
+              {lastAuditDate && <span> &bull; Last: {lastAuditDate}</span>}
+            </div>}
+          </div>
 
           {/* Hero: Rank Map Top-3% */}
           {rankMap && (
@@ -2247,8 +2260,9 @@
     }
 
     /* ── Settings Panel ──────────────────────────────────── */
-    function AdminPanel({ site, open, onClose, billingRecords, usageLogs, locationId, lastAuditDate, onAuditStarted, audits, findings, geoSignals, aiMentions, rankMaps }) {
-      const [adminTab, setAdminTab] = React.useState('runs');
+    function AdminPanel({ site, open, onClose, billingRecords, usageLogs, locationId, lastAuditDate, onAuditStarted, audits, findings, geoSignals, aiMentions, rankMaps, defaultTab }) {
+      const [adminTab, setAdminTab] = React.useState(defaultTab || 'runs');
+      React.useEffect(() => { if (defaultTab && open) setAdminTab(defaultTab); }, [defaultTab, open]);
       const [saving, setSaving] = React.useState(false);
       const [saved, setSaved] = React.useState(false);
       const [auditStatus, setAuditStatus] = React.useState('idle');
@@ -2442,26 +2456,8 @@
               {/* ── RUNS TAB ─────────────────────────────── */}
               {adminTab === 'runs' && (
                 <div>
-                  {/* Run Audit button */}
-                  <button onClick={auditStatus !== 'running' ? runAudit : undefined}
-                    disabled={auditStatus === 'running' || !form.domain}
-                    style={{
-                      width:'100%', padding:'0.65rem', marginBottom:'1rem',
-                      background: auditStatus === 'running' ? '#333' : '#EA9320',
-                      color: auditStatus === 'running' ? '#888' : '#000',
-                      border:'none', borderRadius:'6px', fontWeight:700, cursor: auditStatus === 'running' ? 'wait' : 'pointer',
-                      fontSize:'0.9rem', fontFamily:'Roboto Slab, serif',
-                    }}>
-                    {auditStatus === 'running' ? 'Audit Running...' : 'Run New Audit'}
-                  </button>
-
-                  {/* Live Run Card — shows while audit is in progress */}
-                  {auditStatus === 'running' && (
-                    <LiveRunCard locationId={locationId} onComplete={() => {
-                      setAuditStatus('idle');
-                      setTimeout(() => window.location.reload(), 1500);
-                    }} />
-                  )}
+                  {/* Full Audit Run Card with credits + section progress */}
+                  <AuditRunCard locationId={locationId} site={site} lastAuditDate={lastAuditDate} onAuditStarted={() => { setAuditStatus('running'); if (onAuditStarted) onAuditStarted(); }} auditRunning={auditStatus === 'running'} />
 
                   {/* Unified chronological timeline: audits + rank map scans */}
                   {(() => {
@@ -2873,6 +2869,8 @@
       const [activeTab, setActiveTab] = React.useState('overview');
       const [auditRunning, setAuditRunning] = React.useState(false);
       const [settingsOpen, setSettingsOpen] = React.useState(false);
+      const [adminDefaultTab, setAdminDefaultTab] = React.useState('runs');
+      const openAdmin = (tab) => { setAdminDefaultTab(tab || 'runs'); setSettingsOpen(true); };
 
       // Check if an audit is currently in progress (progress rows exist but not complete)
       React.useEffect(() => {
@@ -3049,7 +3047,7 @@
               fontFamily:'Roboto, sans-serif', marginTop:'0.25rem', transition:'all 0.2s',
             }}>{settingsOpen ? 'Close' : 'Admin'}</button>
           </header>
-          <AdminPanel site={site} open={settingsOpen} onClose={() => setSettingsOpen(false)} billingRecords={billingRecords} usageLogs={usageLogs} locationId={locationId} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} audits={audits} findings={findings} geoSignals={geoSignals} aiMentions={aiMentions} rankMaps={rankMaps} />
+          <AdminPanel site={site} open={settingsOpen} onClose={() => setSettingsOpen(false)} billingRecords={billingRecords} usageLogs={usageLogs} locationId={locationId} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} audits={audits} findings={findings} geoSignals={geoSignals} aiMentions={aiMentions} rankMaps={rankMaps} defaultTab={adminDefaultTab} />
 
           <nav className="tab-bar">
             {tabs.map(t => (
@@ -3060,7 +3058,7 @@
             ))}
           </nav>
 
-          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} homepageSections={homepageSections} apifyResults={latest.apify_results || {}} locationId={locationId} site={site} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} auditRunning={auditRunning} />}
+          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} homepageSections={homepageSections} apifyResults={latest.apify_results || {}} locationId={locationId} site={site} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} auditRunning={auditRunning} onOpenAdmin={openAdmin} />}
           {activeTab === 'homepage' && <HomepageTab homepageSections={homepageSections} />}
           {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} locationId={locationId} onRefresh={() => refreshSection('rankmap')} auditRunning={auditRunning} />}
           {activeTab === 'core30' && <Core30Tab core30={core30} contentBriefs={contentBriefs} />}
