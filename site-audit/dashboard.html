@@ -2261,7 +2261,7 @@
 
     /* ── Settings Panel ──────────────────────────────────── */
     function AdminPanel({ site, open, onClose, billingRecords, usageLogs, locationId, lastAuditDate, onAuditStarted, audits, findings, geoSignals, aiMentions, rankMaps, defaultTab }) {
-      const [adminTab, setAdminTab] = React.useState(defaultTab || 'runs');
+      const [adminTab, setAdminTab] = React.useState(defaultTab || 'settings');
       React.useEffect(() => { if (defaultTab && open) setAdminTab(defaultTab); }, [defaultTab, open]);
       const [saving, setSaving] = React.useState(false);
       const [saved, setSaved] = React.useState(false);
@@ -2445,8 +2445,8 @@
 
             {/* Tab bar */}
             <div style={{display:'flex', gap:'0.5rem', padding:'0.75rem 1.5rem', borderBottom:'1px solid #222', flexShrink:0}}>
+              {adminTabBtn('settings', 'Info')}
               {adminTabBtn('runs', 'Audit Runs')}
-              {adminTabBtn('settings', 'Settings')}
               {adminTabBtn('billing', 'Billing')}
             </div>
 
