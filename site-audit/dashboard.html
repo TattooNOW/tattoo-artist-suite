@@ -488,8 +488,202 @@
       );
     }
 
+    /* ── AuditRunCard — unified run button + progress tracker ── */
+    function AuditRunCard({ locationId, site, lastAuditDate, onAuditStarted, auditRunning }) {
+      const [status, setStatus] = React.useState(auditRunning ? 'running' : 'idle');
+      const [sections, setSections] = React.useState([]);
+      const channelRef = React.useRef(null);
+
+      const allSections = [
+        { key: 'homepage', label: 'Homepage crawl & SEO' },
+        { key: 'core30', label: 'Core 30 analysis' },
+        { key: 'geo', label: 'GEO signal detection' },
+        { key: 'ai_probes', label: 'AI mention probing' },
+        { key: 'rankmap', label: 'Rank map scan' },
+        { key: 'directories', label: 'Directory verification' },
+        { key: 'competitors', label: 'Competitor intelligence' },
+        { key: 'findings', label: 'Findings generation' },
+      ];
+
+      // Monthly credit refill check
+      const checkRefill = React.useCallback(async () => {
+        if (!site) return;
+        const lastRefill = new Date(site.credits_last_refill || 0);
+        const now = new Date();
+        if (lastRefill.getMonth() !== now.getMonth() || lastRefill.getFullYear() !== now.getFullYear()) {
+          const newBalance = (site.credits_remaining || 0) + (site.credits_monthly || 1);
+          await db.from('sites').update({
+            credits_remaining: newBalance,
+            credits_last_refill: now.toISOString(),
+          }).eq('id', site.id);
+          await db.from('credit_transactions').insert({
+            site_id: site.id, amount: site.credits_monthly || 1,
+            balance_after: newBalance, type: 'monthly_refill',
+            description: 'Monthly free credit',
+          });
+          site.credits_remaining = newBalance;
+        }
+      }, [site]);
+
+      React.useEffect(() => { checkRefill(); }, [checkRefill]);
+
+      // Subscribe to progress when running
+      React.useEffect(() => {
+        if (status !== 'running' || !locationId) return;
+        const channel = db.channel(`audit-run-${Date.now()}`)
+          .on('postgres_changes', {
+            event: '*', schema: 'public', table: 'audit_progress',
+            filter: `location_id=eq.${locationId}`,
+          }, (payload) => {
+            const row = payload.new;
+            if (!row) return;
+            const sec = row.section || 'full';
+            if (row.step === 'complete' && sec === 'full') {
+              setStatus('done');
+              setTimeout(() => setStatus('idle'), 3000);
+              channel.unsubscribe();
+              return;
+            }
+            setSections(prev => {
+              const updated = [...prev];
+              const idx = updated.findIndex(s => s.key === sec);
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], status: row.step === 'complete' ? 'done' : 'active', step: row.step, pct: row.pct };
+              } else if (sec !== 'full') {
+                updated.push({ key: sec, status: row.step === 'complete' ? 'done' : 'active', step: row.step, pct: row.pct });
+              }
+              return updated;
+            });
+          })
+          .subscribe();
+        channelRef.current = channel;
+        return () => { if (channelRef.current) channelRef.current.unsubscribe(); };
+      }, [status, locationId]);
+
+      const runAudit = async () => {
+        if (!site || (site.credits_remaining || 0) <= 0) return;
+
+        // Deduct credit
+        const newBalance = (site.credits_remaining || 0) - 1;
+        await db.from('sites').update({ credits_remaining: newBalance }).eq('id', site.id);
+        await db.from('credit_transactions').insert({
+          site_id: site.id, amount: -1, balance_after: newBalance,
+          type: 'usage', description: 'Full audit report',
+        });
+        site.credits_remaining = newBalance;
+
+        setStatus('running');
+        setSections([]);
+
+        // Fire webhook
+        fetch('https://tn.reinventingai.com/webhook/run-audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locationId, domain: site.domain, address: site.address, phone: site.phone }),
+        }).catch(() => {});
+
+        if (onAuditStarted) onAuditStarted();
+      };
+
+      const credits = site?.credits_remaining || 0;
+      const doneCount = sections.filter(s => s.status === 'done').length;
+      const activeSection = sections.find(s => s.status === 'active');
+      const overallPct = status === 'running' ? Math.round((doneCount / allSections.length) * 100) : 0;
+
+      return (
+        <div style={{
+          background: '#1a1a1a', border: '1px solid #333', borderRadius: '10px',
+          padding: '1.25rem 1.5rem', marginBottom: '1.5rem',
+        }}>
+          {status === 'idle' || status === 'done' ? (
+            <>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                <h3 style={{margin:0, fontSize:'1rem'}}>
+                  {status === 'done' ? '\u2713 Audit Complete' : 'Run Full Audit'}
+                </h3>
+                <span style={{
+                  background: credits > 0 ? '#252525' : 'rgba(248,113,113,0.15)',
+                  border: '1px solid ' + (credits > 0 ? '#444' : '#f87171'),
+                  borderRadius: '20px', padding: '0.25rem 0.75rem',
+                  fontSize: '0.75rem', color: credits > 0 ? '#ccc' : '#f87171',
+                }}>
+                  {credits} credit{credits !== 1 ? 's' : ''} remaining
+                </span>
+              </div>
+              <div style={{fontSize:'0.8rem', color:'#888', marginBottom:'1rem', lineHeight:1.5}}>
+                Homepage SEO, Core 30, GEO Signals, AI Mentions, Rank Map, Directories, Competitors, Findings
+              </div>
+              {credits > 0 ? (
+                <button onClick={runAudit} style={{
+                  background: '#EA9320', color: '#000', border: 'none',
+                  borderRadius: '8px', padding: '0.6rem 1.5rem', cursor: 'pointer',
+                  fontWeight: 700, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif',
+                  boxShadow: '0 2px 8px rgba(234,147,32,0.3)',
+                }}>
+                  Run Audit — 1 credit
+                </button>
+              ) : (
+                <div>
+                  <div style={{color:'#f87171', fontSize:'0.85rem', marginBottom:'0.5rem'}}>
+                    No credits remaining. 5-report pack: $10
+                  </div>
+                  <button disabled style={{
+                    background: '#333', color: '#666', border: '1px solid #444',
+                    borderRadius: '8px', padding: '0.6rem 1.5rem', cursor: 'not-allowed',
+                    fontWeight: 700, fontSize: '0.9rem', fontFamily: 'Roboto, sans-serif',
+                  }}>
+                    Request Credits
+                  </button>
+                </div>
+              )}
+              {lastAuditDate && (
+                <div style={{fontSize:'0.75rem', color:'#555', marginTop:'0.75rem'}}>
+                  Last run: {lastAuditDate} &bull; Auto: Sundays 3am
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                <h3 style={{margin:0, fontSize:'1rem', color:'#EA9320'}}>Audit Running...</h3>
+                <span style={{fontSize:'0.8rem', color:'#888'}}>Step {doneCount + (activeSection ? 1 : 0)} of {allSections.length}</span>
+              </div>
+              {/* Progress bar */}
+              <div style={{background:'#252525', borderRadius:'4px', height:'6px', marginBottom:'1rem', overflow:'hidden'}}>
+                <div style={{
+                  background: 'linear-gradient(90deg, #EA9320, #f97316)',
+                  height: '100%', borderRadius: '4px',
+                  width: overallPct + '%', transition: 'width 0.5s ease',
+                }} />
+              </div>
+              {/* Section checklist */}
+              <div style={{display:'flex', flexDirection:'column', gap:'0.35rem'}}>
+                {allSections.map(s => {
+                  const state = sections.find(sec => sec.key === s.key);
+                  const isDone = state?.status === 'done';
+                  const isActive = state?.status === 'active';
+                  return (
+                    <div key={s.key} style={{
+                      display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.8rem',
+                      color: isDone ? '#4ade80' : isActive ? '#EA9320' : '#555',
+                    }}>
+                      <span style={{fontSize:'0.75rem', width:'14px', textAlign:'center'}}>
+                        {isDone ? '\u2713' : isActive ? '\u25CF' : '\u25CB'}
+                      </span>
+                      <span style={{flex:1}}>{s.label}</span>
+                      {isActive && state?.step && <span style={{fontSize:'0.7rem', color:'#888'}}>{state.step}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
     /* ── Tab: Overview ───────────────────────────────────── */
-    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, homepageSections, apifyResults }) {
+    function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, homepageSections, apifyResults, locationId, site, lastAuditDate, onAuditStarted, auditRunning }) {
       const seo = scores.seo?.score ?? '\u2014';
       const ai = scores.ai_discoverability?.score ?? '\u2014';
       const geo = scores.geo_readiness?.score ?? '\u2014';
@@ -497,23 +691,17 @@
 
       return (
         <div>
+          {/* Audit Run Card */}
+          <AuditRunCard locationId={locationId} site={site} lastAuditDate={lastAuditDate} onAuditStarted={onAuditStarted} auditRunning={auditRunning} />
+
           {/* Hero: Rank Map Top-3% */}
-          <div className="hero-metric" style={{borderColor: rankMap ? '#EA9320' : '#333'}}>
-            {rankMap ? (
-              <>
-                <div className="hero-value" style={{color:'#EA9320'}}>{rankMap.top_3_pct}%</div>
-                <div className="hero-label">Top-3 Pack Visibility</div>
-                <div className="hero-sub">"{rankMap.keyword}" &bull; {rankMap.grid_size} grid &bull; {rankMap.scan_date}</div>
-                <div className="hero-sub">Avg rank: {rankMap.avg_rank?.toFixed(1) || '\u2014'} &bull; Grid center rank: {rankMap.center_rank || (rankMap.raw_response && rankMap.raw_response.center_rank) || '\u2014'}</div>
-              </>
-            ) : (
-              <>
-                <div className="hero-value" style={{color:'#333'}}>\u2014</div>
-                <div className="hero-label">Rank Map Not Yet Imported</div>
-                <div className="hero-sub">Run import-rankmap.js with a Local Falcon CSV</div>
-              </>
-            )}
-          </div>
+          {rankMap && (
+            <div className="hero-metric" style={{borderColor:'#EA9320'}}>
+              <div className="hero-value" style={{color:'#EA9320'}}>{rankMap.top_3_pct}%</div>
+              <div className="hero-label">Top-3 Pack Visibility</div>
+              <div className="hero-sub">"{rankMap.keyword}" &bull; {rankMap.grid_size} grid &bull; {rankMap.scan_date}</div>
+            </div>
+          )}
 
           {/* Overall + 3 Score Cards */}
           <section style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap'}}>
@@ -873,9 +1061,15 @@
       );
     }
 
-    function RankMapTab({ rankMaps, locationId, onRefresh }) {
+    function RankMapTab({ rankMaps, locationId, onRefresh, auditRunning }) {
       if (!rankMaps || rankMaps.length === 0) {
-        return <div className="card" style={{textAlign:'center',padding:'3rem'}}><h3 style={{color:'#888'}}>No rank map data imported</h3><p style={{color:'#666'}}>Run a rank map scan to populate.</p></div>;
+        return (
+          <div className="card" style={{textAlign:'center',padding:'3rem'}}>
+            <h3 style={{color:'#888'}}>No Rank Map Data Yet</h3>
+            <p style={{color:'#666', marginBottom:'1rem'}}>Run a full audit from the Overview tab, or scan individually below.</p>
+            {locationId && <FetchNewButton locationId={locationId} section="rankmap" label="Run Scan (free)" onRefresh={onRefresh} hidden={auditRunning} />}
+          </div>
+        );
       }
 
       // Group scans by keyword, latest first within each
@@ -918,7 +1112,7 @@
               );
             })}
             <span style={{marginLeft:'auto'}} />
-            {locationId && <FetchNewButton locationId={locationId} section="rankmap" label="Run Scan" onRefresh={onRefresh} />}
+            {locationId && <FetchNewButton locationId={locationId} section="rankmap" label="Run Scan" onRefresh={onRefresh} hidden={auditRunning} />}
           </div>
 
           {/* Date selector if multiple scans for this keyword */}
@@ -1683,7 +1877,7 @@
     }
 
     /* ── Tab: Insights (combined Findings + GEO + AI) ────── */
-    function InsightsTab({ latestFindings, latestGeo, aiMentions, businessName, locationId, onRefresh }) {
+    function InsightsTab({ latestFindings, latestGeo, aiMentions, businessName, locationId, onRefresh, auditRunning }) {
       const [sub, setSub] = React.useState('findings');
 
       const openFindings = latestFindings.filter(f => f.status === 'open').length;
@@ -1747,9 +1941,9 @@
               );
             })}
           </div>
-          {sub === 'findings' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="findings" label="Re-scan" onRefresh={() => onRefresh('findings')} />}</div><FindingsTab latestFindings={latestFindings} /></React.Fragment>}
-          {sub === 'geo' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="geo" label="Re-scan" onRefresh={() => onRefresh('geo')} />}</div><GeoTab latestGeo={latestGeo} /></React.Fragment>}
-          {sub === 'ai' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="ai" label="Re-scan" onRefresh={() => onRefresh('ai')} />}</div><AITab aiMentions={aiMentions} businessName={businessName} /></React.Fragment>}
+          {sub === 'findings' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="findings" label="Re-scan" onRefresh={() => onRefresh('findings')} hidden={auditRunning} />}</div><FindingsTab latestFindings={latestFindings} /></React.Fragment>}
+          {sub === 'geo' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="geo" label="Re-scan" onRefresh={() => onRefresh('geo')} hidden={auditRunning} />}</div><GeoTab latestGeo={latestGeo} /></React.Fragment>}
+          {sub === 'ai' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="ai" label="Re-scan" onRefresh={() => onRefresh('ai')} hidden={auditRunning} />}</div><AITab aiMentions={aiMentions} businessName={businessName} /></React.Fragment>}
         </div>
       );
     }
@@ -1757,7 +1951,7 @@
     /* ── (LinkChecklistTab removed — merged into DirectoryTab below) ── */
 
     /* ── Tab: Competitors ────────────────────────────────── */
-    function CompetitorsTab({ competitors, site, aiMentions, locationId, onRefresh }) {
+    function CompetitorsTab({ competitors, site, aiMentions, locationId, onRefresh, auditRunning }) {
       if (!competitors || competitors.length === 0) return <p style={{color:'#888'}}>No competitor data yet. Run the AI prober and competitor intelligence scraper to populate.</p>;
 
       // Parse notes JSON and separate client vs competitors
@@ -1808,7 +2002,7 @@
         <div>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem'}}>
             <h3 style={{margin:0}}>Competitive Intelligence — {site.target_city || site.city} <SourceInfo text={"Perplexity API (discovery) + Apify (social/review scraping)\n+ DataForSEO rank map grid data\nAI probes find competitors, Apify scrapes stats, rank map shows who outranks locally"} /></h3>
-            {locationId && <FetchNewButton locationId={locationId} section="competitors" label="Refresh" onRefresh={onRefresh} />}
+            {locationId && <FetchNewButton locationId={locationId} section="competitors" label="Refresh" onRefresh={onRefresh} hidden={auditRunning} />}
           </div>
           <p style={{color:'#888', fontSize:'0.85rem', marginBottom:'1rem'}}>
             {compRows.length} competitors found. <span style={{color:'#f87171'}}>{aboveCount} rank above you</span> in AI results. <span style={{color:'#60a5fa'}}>{mapCount} appear</span> in map top 3.
@@ -1868,7 +2062,7 @@
     }
 
     /* ── Tab: Directories & Links (merged) ──────────────── */
-    function DirectoryTab({ listings, site, locationId, onRefresh, links }) {
+    function DirectoryTab({ listings, site, locationId, onRefresh, links, auditRunning }) {
       const [filterStatus, setFilterStatus] = React.useState('all');
       const [filterTier, setFilterTier] = React.useState('all');
 
@@ -1950,7 +2144,7 @@
             <div className="score-card" style={{borderTop:'2px solid #fbbf24'}}><h3>Needs Fix</h3><div className="value" style={{color:'#fbbf24'}}>{needsAtt}</div></div>
             <div className="score-card" style={{borderTop:'2px solid #f87171'}}><h3>Not Listed</h3><div className="value" style={{color:'#f87171'}}>{notListed}</div></div>
             <div className="score-card" style={{borderTop:'2px solid #60a5fa'}}><h3>NAP</h3><div className="value" style={{color: napPct >= 80 ? '#4ade80' : napPct >= 50 ? '#fbbf24' : '#f87171'}}>{napPct}%</div></div>
-            {locationId && <FetchNewButton locationId={locationId} section="directories" label="Verify Listings" onRefresh={onRefresh} />}
+            {locationId && <FetchNewButton locationId={locationId} section="directories" label="Verify Listings" onRefresh={onRefresh} hidden={auditRunning} />}
           </section>
           {napIssues > 0 && (
             <div className="card" style={{marginBottom:'1.5rem', padding:'1rem', border:'1px solid rgba(251,191,36,0.3)', background:'rgba(251,191,36,0.05)'}}>
@@ -2446,6 +2640,52 @@
               {/* ── BILLING TAB ──────────────────────────── */}
               {adminTab === 'billing' && (
                 <div>
+                  {/* Credit Management */}
+                  {(() => {
+                    const [addAmt, setAddAmt] = React.useState(5);
+                    const [adding, setAdding] = React.useState(false);
+                    const addCredits = async () => {
+                      if (!addAmt || addAmt < 1) return;
+                      setAdding(true);
+                      const newBalance = (site.credits_remaining || 0) + addAmt;
+                      await db.from('sites').update({
+                        credits_remaining: newBalance,
+                        credits_purchased: (site.credits_purchased || 0) + addAmt,
+                      }).eq('id', site.id);
+                      await db.from('credit_transactions').insert({
+                        site_id: site.id, amount: addAmt, balance_after: newBalance,
+                        type: 'purchase', description: `${addAmt}-credit pack added by admin`,
+                      });
+                      site.credits_remaining = newBalance;
+                      site.credits_purchased = (site.credits_purchased || 0) + addAmt;
+                      setAdding(false);
+                    };
+                    return (
+                      <div style={{background:'#0a0a0a', border:'1px solid #333', borderRadius:'8px', padding:'1rem', marginBottom:'1.5rem'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                          <div>
+                            <div style={{fontSize:'0.7rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Credits</div>
+                            <div style={{fontSize:'1.8rem', fontWeight:700, color: (site.credits_remaining||0) > 0 ? '#4ade80' : '#f87171'}}>
+                              {site.credits_remaining || 0}
+                              <span style={{fontSize:'0.9rem', color:'#888', fontWeight:400}}> remaining</span>
+                            </div>
+                            <div style={{fontSize:'0.75rem', color:'#666'}}>{site.credits_purchased || 0} purchased &bull; {site.credits_monthly || 1}/mo free</div>
+                          </div>
+                          <div style={{display:'flex', gap:'0.5rem', alignItems:'center'}}>
+                            <input type="number" min="1" max="50" value={addAmt} onChange={e => setAddAmt(parseInt(e.target.value)||0)}
+                              style={{width:'50px', background:'#111', color:'#fafafa', border:'1px solid #444', borderRadius:'4px', padding:'0.4rem', textAlign:'center', fontSize:'0.85rem'}} />
+                            <button onClick={addCredits} disabled={adding} style={{
+                              background:'#EA9320', color:'#000', border:'none', borderRadius:'6px',
+                              padding:'0.4rem 0.75rem', fontWeight:700, fontSize:'0.8rem', cursor:'pointer',
+                            }}>
+                              {adding ? '...' : 'Add Credits'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Summary cards */}
                   {(() => {
                     const totalAudits = billingRecords.length || audits.length;
@@ -2526,8 +2766,9 @@
     }
 
     /* ── FetchNewButton — per-section refresh via n8n webhook ── */
-    function FetchNewButton({ locationId, section, label, onRefresh }) {
+    function FetchNewButton({ locationId, section, label, onRefresh, hidden }) {
       const [state, setState] = React.useState('idle'); // idle | fetching | done | error
+      if (hidden) return null;
       const [progress, setProgress] = React.useState(null);
       const channelRef = React.useRef(null);
 
@@ -2819,13 +3060,13 @@
             ))}
           </nav>
 
-          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} homepageSections={homepageSections} apifyResults={latest.apify_results || {}} />}
+          {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} homepageSections={homepageSections} apifyResults={latest.apify_results || {}} locationId={locationId} site={site} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} auditRunning={auditRunning} />}
           {activeTab === 'homepage' && <HomepageTab homepageSections={homepageSections} />}
-          {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} locationId={locationId} onRefresh={() => refreshSection('rankmap')} />}
+          {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} locationId={locationId} onRefresh={() => refreshSection('rankmap')} auditRunning={auditRunning} />}
           {activeTab === 'core30' && <Core30Tab core30={core30} contentBriefs={contentBriefs} />}
-          {activeTab === 'insights' && <InsightsTab latestFindings={latestFindings} latestGeo={latestGeo} aiMentions={aiMentions} businessName={site.business_name} locationId={locationId} onRefresh={refreshSection} />}
-          {activeTab === 'directories' && <DirectoryTab listings={directoryListings} site={site} locationId={locationId} onRefresh={() => refreshSection('directories')} links={linkChecklist} />}
-          {activeTab === 'competitors' && <CompetitorsTab competitors={competitors} site={site} aiMentions={aiMentions} locationId={locationId} onRefresh={() => refreshSection('competitors')} />}
+          {activeTab === 'insights' && <InsightsTab latestFindings={latestFindings} latestGeo={latestGeo} aiMentions={aiMentions} businessName={site.business_name} locationId={locationId} onRefresh={refreshSection} auditRunning={auditRunning} />}
+          {activeTab === 'directories' && <DirectoryTab listings={directoryListings} site={site} locationId={locationId} onRefresh={() => refreshSection('directories')} links={linkChecklist} auditRunning={auditRunning} />}
+          {activeTab === 'competitors' && <CompetitorsTab competitors={competitors} site={site} aiMentions={aiMentions} locationId={locationId} onRefresh={() => refreshSection('competitors')} auditRunning={auditRunning} />}
           {activeTab === 'clarity' && <ClarityTab clarityToken={site.social_links?.clarity_token} />}
 
           <footer style={{marginTop:'2rem', padding:'1rem 0', borderTop:'1px solid #222', fontSize:'0.8rem', color:'#666'}}>
