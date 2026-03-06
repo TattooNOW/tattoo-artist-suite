@@ -10,6 +10,8 @@
   <script>window.PropTypes = window.PropTypes || window.propTypes;</script>
   <script src="https://cdn.jsdelivr.net/npm/recharts@2/umd/Recharts.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     body, html { margin:0; padding:0; background:#0a0a0a; color:#fafafa; font-family:'Roboto',sans-serif; }
@@ -20,10 +22,10 @@
     table th { text-align:left; padding:8px 12px; border-bottom:2px solid #333; font-size:0.85rem; text-transform:uppercase; color:#888; letter-spacing:0.5px; }
     table td { padding:6px 12px; border-bottom:1px solid #222; }
     .card { background:#1a1a1a; padding:1.5rem; border-radius:8px; }
-    .score-card { flex:1; background:#1a1a1a; padding:1.5rem; border-radius:8px; text-align:center; }
-    .score-card h3 { margin:0 0 0.5rem 0; font-size:0.9rem; text-transform:uppercase; letter-spacing:1px; color:#888; }
-    .score-card .value { font-size:2.5rem; font-weight:700; }
-    .score-card .delta { font-size:1rem; margin-top:0.25rem; }
+    .score-card { flex:1; background:#252525; padding:0.75rem 1rem; border-radius:8px; text-align:center; min-width:80px; }
+    .score-card h3 { margin:0 0 0.25rem 0; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:#999; }
+    .score-card .value { font-size:1.6rem; font-weight:700; }
+    .score-card .delta { font-size:0.85rem; margin-top:0.15rem; }
     .hero-metric { text-align:center; padding:2rem 1rem; margin-bottom:2rem; background:linear-gradient(135deg, #1a1a1a 0%, #111 100%); border-radius:12px; border:1px solid #333; }
     .hero-metric .hero-value { font-size:5rem; font-weight:700; line-height:1; }
     .hero-metric .hero-label { font-size:1.1rem; color:#888; margin-top:0.5rem; }
@@ -48,6 +50,17 @@
     .pill { display:inline-block; padding:0.15rem 0.6rem; border-radius:10px; font-size:0.75rem; font-weight:600; }
     .progress-bar { background:#333; border-radius:4px; height:8px; overflow:hidden; }
     .progress-fill { height:100%; border-radius:4px; transition:width 0.3s; }
+    .rank-popup .leaflet-popup-content-wrapper { background:#1a1a1a; color:#fafafa; border:1px solid #333; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.6); }
+    .rank-popup .leaflet-popup-tip { background:#1a1a1a; border:1px solid #333; }
+    .rank-popup .leaflet-popup-content { margin:12px 14px; color:#fafafa; }
+    .rank-popup .leaflet-popup-content div { color:#fafafa !important; }
+    .rank-popup .leaflet-popup-content span { color:#aaa; }
+    .rank-popup .leaflet-popup-close-button { color:#888 !important; }
+    .rank-popup .leaflet-popup-close-button:hover { color:#fff !important; }
+    .rank-tooltip { background:#1a1a1a !important; color:#EA9320 !important; border:1px solid #EA9320 !important; font-family:Roboto,sans-serif !important; }
+    .rank-tooltip-card { background:#fff !important; color:#222 !important; border:1px solid #ddd !important; border-radius:8px !important; box-shadow:0 4px 16px rgba(0,0,0,0.25) !important; padding:6px 8px !important; font-family:Roboto,sans-serif !important; }
+    .rank-tooltip-card .leaflet-tooltip-content { color:#222 !important; }
+    .rank-tooltip-card::before { border-top-color:#fff !important; }
     select.filter { background:#1a1a1a; color:#fafafa; border:1px solid #333; padding:0.4rem 0.8rem; border-radius:4px; }
   </style>
 </head>
@@ -330,6 +343,151 @@
       );
     }
 
+    /* ── Component: Live Run Card (inline in Admin Runs tab) ── */
+    function LiveRunCard({ locationId, onComplete }) {
+      const [elapsed, setElapsed] = React.useState(0);
+      const [liveStep, setLiveStep] = React.useState('starting');
+      const [livePct, setLivePct] = React.useState(5);
+      const [liveMsg, setLiveMsg] = React.useState('Starting audit...');
+      const [done, setDone] = React.useState(false);
+      const [error, setError] = React.useState(null);
+      const startTime = React.useRef(Date.now());
+
+      const steps = [
+        { key: 'starting',     label: 'Starting audit',              icon: '\u{1F680}' },
+        { key: 'site_located', label: 'Site located',                icon: '\u{1F4CD}' },
+        { key: 'crawling',     label: 'Crawling website',            icon: '\u{1F578}' },
+        { key: 'analyzing',    label: 'Analyzing HTML & content',    icon: '\u{1F50D}' },
+        { key: 'scoring',      label: 'Scoring SEO, AI & GEO',      icon: '\u{1F4CA}' },
+        { key: 'writing',      label: 'Writing audit report',        icon: '\u{270D}' },
+        { key: 'complete',     label: 'Audit complete!',             icon: '\u2705' },
+      ];
+
+      // Elapsed timer
+      React.useEffect(() => {
+        if (done) return;
+        const iv = setInterval(() => setElapsed(Math.round((Date.now() - startTime.current) / 1000)), 1000);
+        return () => clearInterval(iv);
+      }, [done]);
+
+      // Subscribe to audit_progress via Supabase Realtime
+      React.useEffect(() => {
+        if (!locationId) return;
+        const channel = db.channel('live-run-' + locationId + '-' + Date.now())
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'audit_progress',
+            filter: 'location_id=eq.' + locationId,
+          }, (payload) => {
+            const row = payload.new;
+            setLiveStep(row.step);
+            setLivePct(row.pct || 0);
+            setLiveMsg(row.message || row.step);
+            if (row.step === 'complete') {
+              setDone(true);
+              if (onComplete) setTimeout(onComplete, 1500);
+            }
+            if (row.step === 'error') {
+              setError(row.message || 'Audit failed');
+              setDone(true);
+            }
+          })
+          .subscribe();
+        return () => { db.removeChannel(channel); };
+      }, [locationId]);
+
+      // Fallback poll: check for new audits every 10s
+      React.useEffect(() => {
+        if (!locationId || done) return;
+        let canceled = false;
+        const poll = async () => {
+          try {
+            const { data: siteData } = await db.from('sites').select('id').eq('ghl_location_id', locationId).maybeSingle();
+            if (!siteData || canceled) return;
+            const { data: prog } = await db.from('audit_progress').select('step,pct,message')
+              .eq('location_id', locationId).order('created_at', { ascending: false }).limit(1);
+            if (canceled) return;
+            if (prog && prog.length > 0) {
+              setLiveStep(prog[0].step);
+              setLivePct(prog[0].pct || 0);
+              setLiveMsg(prog[0].message || prog[0].step);
+              if (prog[0].step === 'complete') {
+                setDone(true);
+                if (onComplete) setTimeout(onComplete, 1500);
+              }
+            }
+          } catch (e) { /* ignore */ }
+        };
+        const iv = setInterval(poll, 10000);
+        // Also poll once after 5s in case realtime is slow
+        const t = setTimeout(poll, 5000);
+        return () => { canceled = true; clearInterval(iv); clearTimeout(t); };
+      }, [locationId, done]);
+
+      const currentStepIdx = steps.findIndex(s => s.key === liveStep);
+      const fmtElapsed = (s) => s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+
+      return (
+        <div style={{
+          background: done && !error ? 'rgba(74,222,128,0.05)' : error ? 'rgba(248,113,113,0.05)' : 'rgba(234,147,32,0.05)',
+          border: '1px solid ' + (done && !error ? '#4ade80' : error ? '#f87171' : '#EA9320'),
+          borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem',
+          animation: done ? 'none' : 'pulse 2s ease-in-out infinite',
+        }}>
+          {/* Header row */}
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'0.75rem'}}>
+              {!done && <div style={{
+                width:'20px', height:'20px', border:'3px solid #333', borderTop:'3px solid #EA9320',
+                borderRadius:'50%', animation:'spin 1s linear infinite',
+              }} />}
+              {done && !error && <span style={{fontSize:'1.2rem'}}>{'\u2705'}</span>}
+              {error && <span style={{fontSize:'1.2rem'}}>{'\u274C'}</span>}
+              <span style={{fontWeight:700, fontSize:'1rem', color: done && !error ? '#4ade80' : error ? '#f87171' : '#EA9320'}}>
+                {done && !error ? 'Audit Complete!' : error ? 'Audit Failed' : 'Audit Running...'}
+              </span>
+            </div>
+            <span style={{color:'#888', fontSize:'0.8rem', fontFamily:'monospace'}}>{fmtElapsed(elapsed)}</span>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{height:'6px', background:'#222', borderRadius:'3px', marginBottom:'1rem', overflow:'hidden'}}>
+            <div style={{
+              height:'100%', borderRadius:'3px',
+              width: (done ? 100 : livePct) + '%',
+              background: done && !error ? '#4ade80' : error ? '#f87171' : 'linear-gradient(90deg, #EA9320, #f5c542)',
+              transition: 'width 0.8s ease-out',
+            }} />
+          </div>
+
+          {/* Step list */}
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:'0.4rem 1rem'}}>
+            {steps.map((s, i) => {
+              const isDone = i < currentStepIdx || (done && !error);
+              const isActive = i === currentStepIdx && !done;
+              return (
+                <div key={s.key} style={{
+                  display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.8rem',
+                  color: isDone ? '#4ade80' : isActive ? '#EA9320' : '#444',
+                  fontWeight: isActive ? 600 : 400,
+                }}>
+                  <span style={{fontSize:'0.75rem'}}>
+                    {isDone ? '\u2713' : isActive ? '\u25CF' : '\u25CB'}
+                  </span>
+                  <span style={{animation: isActive ? 'pulse 1.5s ease-in-out infinite' : 'none'}}>
+                    {s.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {error && <div style={{marginTop:'0.75rem', padding:'0.5rem 0.75rem', background:'rgba(248,113,113,0.1)', borderRadius:'4px', fontSize:'0.8rem', color:'#f87171'}}>{error}</div>}
+        </div>
+      );
+    }
+
     /* ── Tab: Overview ───────────────────────────────────── */
     function OverviewTab({ scores, delta, chartData, quickWins, rankMap, core30, homepageSections, apifyResults }) {
       const seo = scores.seo?.score ?? '\u2014';
@@ -345,8 +503,8 @@
               <>
                 <div className="hero-value" style={{color:'#EA9320'}}>{rankMap.top_3_pct}%</div>
                 <div className="hero-label">Top-3 Pack Visibility</div>
-                <div className="hero-sub">"{rankMap.keyword}" &bull; {rankMap.grid_size}pt grid &bull; {rankMap.scan_date}</div>
-                <div className="hero-sub">Avg rank: {rankMap.avg_rank?.toFixed(1) || '\u2014'} &bull; Grid center rank: {rankMap.center_rank || '\u2014'}</div>
+                <div className="hero-sub">"{rankMap.keyword}" &bull; {rankMap.grid_size} grid &bull; {rankMap.scan_date}</div>
+                <div className="hero-sub">Avg rank: {rankMap.avg_rank?.toFixed(1) || '\u2014'} &bull; Grid center rank: {rankMap.center_rank || (rankMap.raw_response && rankMap.raw_response.center_rank) || '\u2014'}</div>
               </>
             ) : (
               <>
@@ -358,23 +516,23 @@
           </div>
 
           {/* Overall + 3 Score Cards */}
-          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
-            <div className="score-card" style={{borderTop:'3px solid #a78bfa'}}>
+          <section style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'2px solid #a78bfa'}}>
               <h3>Overall</h3>
               <div className="value" style={{color:'#a78bfa'}}>{scores.overall ?? '\u2014'}</div>
               <div className="delta" style={{color:deltaColor(delta.overall)}}>{getDeltaArrow(delta.overall)} {delta.overall != null ? (delta.overall>0?'+':'')+delta.overall+' pts':''}</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}>
+            <div className="score-card" style={{borderTop:'2px solid #4ade80'}}>
               <h3>SEO (L1)</h3>
               <div className="value" style={{color:'#4ade80'}}>{seo}</div>
               <div className="delta" style={{color:deltaColor(delta.seo)}}>{getDeltaArrow(delta.seo)} {delta.seo!=null?(delta.seo>0?'+':'')+delta.seo:''}</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #fbbf24'}}>
+            <div className="score-card" style={{borderTop:'2px solid #fbbf24'}}>
               <h3>AI (L2)</h3>
               <div className="value" style={{color:'#fbbf24'}}>{ai}</div>
               <div className="delta" style={{color:deltaColor(delta.ai_discoverability)}}>{getDeltaArrow(delta.ai_discoverability)} {delta.ai_discoverability!=null?(delta.ai_discoverability>0?'+':'')+delta.ai_discoverability:''}</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #f97316'}}>
+            <div className="score-card" style={{borderTop:'2px solid #f97316'}}>
               <h3>GEO (L3)</h3>
               <div className="value" style={{color:'#f97316'}}>{geo}</div>
               <div className="delta" style={{color:deltaColor(delta.geo_readiness)}}>{getDeltaArrow(delta.geo_readiness)} {delta.geo_readiness!=null?(delta.geo_readiness>0?'+':'')+delta.geo_readiness:''}</div>
@@ -520,75 +678,307 @@
     }
 
     /* ── Tab: Rank Map ───────────────────────────────────── */
-    function RankMapTab({ rankMaps }) {
+    /* ── Leaflet Map for Rank Grid ──────────────────────── */
+    function RankMapLeaflet({ rm, grid, size, onSelectPoint }) {
+      const mapRef = React.useRef(null);
+      const mapInstanceRef = React.useRef(null);
+
+      React.useEffect(() => {
+        if (!mapRef.current || !window.L) return;
+        const coords = rm.raw_response && rm.raw_response.grid_coords;
+        const cLat = parseFloat(rm.grid_center_lat || (rm.raw_response && rm.raw_response.center_lat) || 0);
+        const cLng = parseFloat(rm.grid_center_lng || (rm.raw_response && rm.raw_response.center_lng) || 0);
+        if (!cLat || !cLng) return;
+
+        if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
+
+        const map = L.map(mapRef.current, { zoomControl: true, scrollWheelZoom: false, attributionControl: false }).setView([cLat, cLng], 12);
+        mapInstanceRef.current = map;
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+
+        // Colors: green = 1-3, orange = 4-10, red = 11+, gray = no results
+        const getRankStyle = (rank, resultCount) => {
+          if (resultCount === 0) return { bg: '#444', border: '#333', color: '#888' }; // N/A - no results
+          if (!rank) return { bg: '#dc2626', border: '#b91c1c', color: '#fff' };
+          if (rank <= 3) return { bg: '#16a34a', border: '#15803d', color: '#fff' };
+          if (rank <= 10) return { bg: '#c2710c', border: '#a16207', color: '#fff' };
+          return { bg: '#dc2626', border: '#b91c1c', color: '#fff' };
+        };
+
+        // Get business name for highlighting
+        const bizName = (rm.raw_response?.grid_coords || []).reduce((found, c) => {
+          if (found) return found;
+          const tr = c?.top_results || [];
+          for (const r of tr) {
+            if (r.domain && r.domain.toLowerCase().includes('darkside')) return r.title;
+            if (r.title && r.title.toLowerCase().includes('darkside')) return r.title;
+          }
+          return null;
+        }, null) || '';
+        const bizWord = bizName ? bizName.split(' ')[0].toLowerCase() : '';
+
+        // Reverse geocode helper (approximate town from lat/lng using Nominatim)
+        const townCache = {};
+        const getTown = async (lat, lng) => {
+          const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+          if (townCache[key]) return townCache[key];
+          try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=10&addressdetails=1`);
+            const data = await resp.json();
+            const town = data.address?.city || data.address?.town || data.address?.village || data.address?.suburb || data.address?.hamlet || '';
+            townCache[key] = town;
+            return town;
+          } catch { return ''; }
+        };
+
+        // Build hover tooltip HTML (top 3 + client rank)
+        const buildTooltip = (coord, rank, idx) => {
+          const topResults = coord && coord.top_results ? coord.top_results : [];
+          const isCenter = idx === Math.floor(grid.length / 2);
+
+          let html = `<div style="font-family:Roboto,sans-serif;min-width:200px;max-width:260px;">`;
+
+          // Top 3 rows (like BrightLocal's white card)
+          const top3 = topResults.filter(r => r.rank <= 3);
+          if (top3.length > 0) {
+            top3.forEach(r => {
+              const isUs = bizWord && r.title && r.title.toLowerCase().includes(bizWord);
+              const rColor = r.rank <= 3 ? '#16a34a' : r.rank <= 10 ? '#f59e0b' : '#f87171';
+              html += `<div style="display:flex;gap:6px;align-items:center;padding:4px 2px;font-size:12px;">`;
+              html += `<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${rColor};color:#fff;font-weight:700;font-size:10px;flex-shrink:0;">${r.rank}</span>`;
+              html += `<span style="flex:1;color:${isUs ? '#EA9320' : '#222'};font-weight:${isUs ? '700' : '500'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.title || 'Unknown'}</span>`;
+              html += `</div>`;
+            });
+          }
+
+          // Show client rank if 4-20
+          if (rank && rank > 3) {
+            const isUs = true;
+            const rColor = rank <= 10 ? '#f59e0b' : '#f87171';
+            const clientResult = topResults.find(r => {
+              return bizWord && r.title && r.title.toLowerCase().includes(bizWord);
+            });
+            const title = clientResult ? clientResult.title : 'Your Business';
+            html += `<div style="display:flex;gap:6px;align-items:center;padding:4px 2px;font-size:12px;margin-top:2px;border-top:1px solid #eee;">`;
+            html += `<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${rColor};color:#fff;font-weight:700;font-size:10px;flex-shrink:0;">${rank}</span>`;
+            html += `<span style="flex:1;color:#EA9320;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>`;
+            html += `</div>`;
+          }
+
+          if (topResults.length === 0) {
+            html += `<div style="font-size:11px;color:#999;padding:4px 2px;font-style:italic;">No results for this area</div>`;
+          }
+
+          html += `</div>`;
+          return html;
+        };
+
+        const addMarker = (lat, lng, rank, idx, coord) => {
+          const resultCount = coord ? (coord.result_count != null ? coord.result_count : (coord.top_results || []).length) : -1;
+          const style = getRankStyle(rank, resultCount);
+          const isCenter = idx === Math.floor(grid.length / 2);
+          const sz = isCenter ? 44 : 36;
+          const label = resultCount === 0 ? 'N/A' : (rank ? rank : '20+');
+          const fontSize = (!rank || resultCount === 0) ? '10px' : (isCenter ? '16px' : '14px');
+
+          const icon = L.divIcon({
+            className: '',
+            html: `<div style="width:${sz}px;height:${sz}px;display:flex;align-items:center;justify-content:center;background:${style.bg};color:${style.color};border:${isCenter ? '3px solid #fff' : '2px solid ' + style.border};border-radius:50%;font-size:${fontSize};font-weight:700;font-family:Roboto,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,0.6);cursor:pointer;transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.15)';this.style.zIndex=999;" onmouseout="this.style.transform='scale(1)';this.style.zIndex='';">${label}</div>`,
+            iconSize: [sz, sz],
+            iconAnchor: [sz / 2, sz / 2],
+          });
+
+          const marker = L.marker([lat, lng], { icon }).addTo(map);
+
+          // Hover → tooltip with top 3
+          const topResults = coord && coord.top_results ? coord.top_results : [];
+          if (topResults.length > 0 || rank) {
+            marker.bindTooltip(buildTooltip(coord, rank, idx), {
+              direction: 'top', offset: [0, -sz/2 - 4], className: 'rank-tooltip-card',
+              opacity: 1, sticky: false,
+            });
+          }
+
+          // Click → open full detail modal
+          marker.on('click', () => {
+            if (onSelectPoint) {
+              onSelectPoint({ coord, rank, idx, topResults, bizWord });
+            }
+          });
+        };
+
+        if (coords && coords.length === grid.length) {
+          coords.forEach((coord, i) => {
+            if (!coord || !coord.lat || !coord.lng) return;
+            addMarker(coord.lat, coord.lng, grid[i], i, coord);
+          });
+          const lats = coords.filter(c => c && c.lat).map(c => c.lat);
+          const lngs = coords.filter(c => c && c.lng).map(c => c.lng);
+          if (lats.length > 0) {
+            map.fitBounds([[Math.min(...lats) - 0.01, Math.min(...lngs) - 0.01], [Math.max(...lats) + 0.01, Math.max(...lngs) + 0.01]]);
+          }
+        } else {
+          const radiusMi = rm.grid_radius_mi || (rm.raw_response && rm.raw_response.radius_mi) || 5;
+          const latSpan = radiusMi * 2 / 69.0;
+          const lngSpan = radiusMi * 2 / (69.0 * Math.cos(cLat * Math.PI / 180));
+          const latStep = latSpan / (size - 1);
+          const lngStep = lngSpan / (size - 1);
+          const startLat = cLat + latSpan / 2;
+          const startLng = cLng - lngSpan / 2;
+          for (let row = 0; row < size; row++) {
+            for (let col = 0; col < size; col++) {
+              const idx = row * size + col;
+              addMarker(startLat - row * latStep, startLng + col * lngStep, grid[idx], idx, null);
+            }
+          }
+        }
+
+        const starIcon = L.divIcon({
+          className: '',
+          html: '<div style="width:14px;height:14px;background:#EA9320;border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(234,147,32,0.8);"></div>',
+          iconSize: [14, 14], iconAnchor: [7, 7],
+        });
+        L.marker([cLat, cLng], { icon: starIcon, zIndexOffset: 1000 }).addTo(map).bindTooltip('Business Location', {direction:'top',className:'rank-tooltip'});
+
+        setTimeout(() => map.invalidateSize(), 100);
+        return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
+      }, [rm, grid, size]);
+
+      return React.createElement('div', {
+        ref: mapRef,
+        style: { width: '100%', height: '500px', borderRadius: '8px', margin: '1rem 0', border: '1px solid #333' }
+      });
+    }
+
+    /* ── SourceInfo tooltip — shows API data source on hover ── */
+    function SourceInfo({ text }) {
+      const [show, setShow] = React.useState(false);
+      return (
+        <span style={{position:'relative', display:'inline-block', marginLeft:'0.4rem', cursor:'help'}}
+          onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+          <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center',
+            width:'16px', height:'16px', borderRadius:'50%', background:'#333', color:'#888',
+            fontSize:'0.65rem', fontWeight:700, fontStyle:'italic', lineHeight:1}}>i</span>
+          {show && (
+            <div style={{position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
+              background:'#1a1a1a', border:'1px solid #444', borderRadius:'6px', padding:'0.5rem 0.75rem',
+              fontSize:'0.75rem', color:'#ccc', whiteSpace:'pre-line', zIndex:999,
+              minWidth:'200px', maxWidth:'300px', boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
+              lineHeight:1.4, pointerEvents:'none'}}>
+              {text}
+            </div>
+          )}
+        </span>
+      );
+    }
+
+    function RankMapTab({ rankMaps, locationId, onRefresh }) {
       if (!rankMaps || rankMaps.length === 0) {
-        return <div className="card" style={{textAlign:'center',padding:'3rem'}}><h3 style={{color:'#888'}}>No rank map data imported</h3><p style={{color:'#666'}}>Run import-rankmap.js with a Local Falcon or DataForSEO CSV.</p></div>;
+        return <div className="card" style={{textAlign:'center',padding:'3rem'}}><h3 style={{color:'#888'}}>No rank map data imported</h3><p style={{color:'#666'}}>Run a rank map scan to populate.</p></div>;
       }
 
-      const [selectedIdx, setSelectedIdx] = React.useState(0);
-      const rm = rankMaps[selectedIdx];
+      // Group scans by keyword, latest first within each
+      const keywords = [...new Set(rankMaps.map(r => r.keyword))];
+      const [activeKeyword, setActiveKeyword] = React.useState(keywords[0]);
+      const kwScans = rankMaps.filter(r => r.keyword === activeKeyword);
+      const [scanIdx, setScanIdx] = React.useState(0);
+      const rm = kwScans[scanIdx] || kwScans[0];
+      if (!rm) return null;
+
+      const [detailPoint, setDetailPoint] = React.useState(null);
+
+      // Reset scan index when keyword changes
+      React.useEffect(() => { setScanIdx(0); }, [activeKeyword]);
+
       const grid = rm.grid_data || [];
-      const size = rm.grid_size || Math.round(Math.sqrt(grid.length)) || 5;
+      const sizeRaw = rm.grid_size || '';
+      const size = typeof sizeRaw === 'number' ? sizeRaw : (parseInt(sizeRaw) || Math.round(Math.sqrt(grid.length)) || 5);
+      const centerRank = rm.center_rank || (rm.raw_response && rm.raw_response.center_rank) || null;
+      const radiusMi = rm.grid_radius_mi || (rm.raw_response && rm.raw_response.radius_mi) || null;
 
       return (
         <div>
-          {/* Selector for multiple scans */}
-          {rankMaps.length > 1 && (
-            <div style={{marginBottom:'1.5rem'}}>
-              <select className="filter" value={selectedIdx} onChange={e => setSelectedIdx(Number(e.target.value))}>
-                {rankMaps.map((r,i) => (
-                  <option key={r.id} value={i}>{r.keyword} — {r.scan_date} ({r.source})</option>
+          {/* Keyword pill tabs */}
+          <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.25rem', flexWrap:'wrap', alignItems:'center'}}>
+            <span style={{color:'#666', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.5px', marginRight:'0.25rem'}}>Keyword:</span>
+            {keywords.map(kw => {
+              const latest = rankMaps.find(r => r.keyword === kw);
+              return (
+                <button key={kw} onClick={() => setActiveKeyword(kw)} style={{
+                  padding:'0.35rem 0.85rem', borderRadius:'20px', fontSize:'0.8rem', fontFamily:'Roboto, sans-serif',
+                  background: activeKeyword === kw ? '#EA9320' : 'transparent',
+                  color: activeKeyword === kw ? '#000' : '#aaa',
+                  border: '1px solid ' + (activeKeyword === kw ? '#EA9320' : '#333'),
+                  cursor:'pointer', fontWeight: activeKeyword === kw ? 700 : 400,
+                  transition:'all 0.15s',
+                }}>
+                  "{kw}" {latest && <span style={{opacity:0.7, marginLeft:'0.25rem', fontSize:'0.7rem'}}>{latest.top_3_pct}%</span>}
+                </button>
+              );
+            })}
+            <span style={{marginLeft:'auto'}} />
+            {locationId && <FetchNewButton locationId={locationId} section="rankmap" label="Run Scan" onRefresh={onRefresh} />}
+          </div>
+
+          {/* Date selector if multiple scans for this keyword */}
+          {kwScans.length > 1 && (
+            <div style={{marginBottom:'1rem'}}>
+              <select className="filter" value={scanIdx} onChange={e => setScanIdx(Number(e.target.value))}>
+                {kwScans.map((r,i) => (
+                  <option key={r.id} value={i}>{r.scan_date} — {r.grid_size} grid, {r.top_3_pct}% top-3</option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* Stats */}
-          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
-            <div className="score-card" style={{borderTop:'3px solid #EA9320'}}>
-              <h3>Top-3 %</h3>
-              <div className="value" style={{color:'#EA9320'}}>{rm.top_3_pct}%</div>
-            </div>
-            <div className="score-card" style={{borderTop:'3px solid #a78bfa'}}>
-              <h3>Avg Rank</h3>
-              <div className="value">{rm.avg_rank?.toFixed(1) || '\u2014'}</div>
-            </div>
-            <div className="score-card" style={{borderTop:'3px solid #60a5fa'}}>
-              <h3>Center Rank</h3>
-              <div className="value">{rm.center_rank || '\u2014'}</div>
-            </div>
-            <div className="score-card" style={{borderTop:'3px solid #888'}}>
-              <h3>Grid</h3>
-              <div className="value" style={{fontSize:'1.8rem'}}>{size}x{size}</div>
-              <div style={{color:'#888', fontSize:'0.8rem'}}>{rm.radius_km ? rm.radius_km+'km radius' : ''}</div>
-            </div>
-          </section>
+          {/* Compact stats bar */}
+          {(() => {
+            const coords = rm.raw_response?.grid_coords || [];
+            const rankedGridVals = grid.filter(r => r !== null);
+            const pointsWithResults = coords.filter(c => (c.result_count || (c.top_results || []).length) > 0).length || grid.length;
+            const allRanks = grid.map((r, i) => {
+              const c = coords[i];
+              const hasResults = c ? (c.result_count || (c.top_results || []).length) > 0 : true;
+              return hasResults ? (r || 21) : null;
+            }).filter(r => r !== null);
+            const trueAvg = allRanks.length > 0 ? (allRanks.reduce((a,b) => a+b, 0) / allRanks.length).toFixed(1) : null;
+            const StatItem = ({label, value, color}) => (
+              <span style={{display:'inline-flex', alignItems:'baseline', gap:'0.35rem'}}>
+                <span style={{color:'#888', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.3px'}}>{label}</span>
+                <span style={{color, fontWeight:700, fontSize:'1.1rem'}}>{value}</span>
+              </span>
+            );
+            return (
+              <div style={{display:'flex', gap:'1.5rem', marginBottom:'1.25rem', flexWrap:'wrap', alignItems:'center', padding:'0.6rem 1rem', background:'#111', borderRadius:'8px', border:'1px solid #222'}}>
+                <StatItem label="Top-3" value={rm.top_3_pct+'%'} color={rm.top_3_pct >= 50 ? '#16a34a' : rm.top_3_pct >= 20 ? '#EA9320' : '#ef4444'} />
+                <StatItem label="Avg" value={trueAvg || '\u2014'} color={trueAvg <= 3 ? '#16a34a' : trueAvg <= 10 ? '#EA9320' : '#ef4444'} />
+                <StatItem label="Center" value={centerRank || '20+'} color={centerRank && centerRank <= 3 ? '#16a34a' : '#EA9320'} />
+                <StatItem label="Grid" value={`${size}\u00D7${size}`} color="#ccc" />
+                {radiusMi && <span style={{color:'#666', fontSize:'0.75rem'}}>{radiusMi} mi</span>}
+                <span style={{color:'#555', fontSize:'0.75rem', marginLeft:'auto'}}>{rankedGridVals.length}/{pointsWithResults} ranked</span>
+              </div>
+            );
+          })()}
 
-          {/* Grid visualization */}
+          {/* Grid Map with Leaflet */}
           <section className="card" style={{marginBottom:'2rem'}}>
-            <h3 style={{marginTop:0}}>Grid Map — "{rm.keyword}"</h3>
-            <div style={{display:'inline-grid', gridTemplateColumns:`repeat(${size}, 32px)`, gap:'3px', margin:'1rem 0'}}>
-              {grid.map((rank, i) => (
-                <div key={i} className="grid-cell" style={{background:rankBg(rank), color:rankColor(rank), borderColor: i === Math.floor(grid.length/2) ? '#EA9320' : '#333', borderWidth: i === Math.floor(grid.length/2) ? '2px' : '1px'}}>
-                  {rank && rank <= 20 ? rank : rank ? '20+' : '\u2014'}
-                </div>
-              ))}
-            </div>
-            <div style={{display:'flex', gap:'1rem', flexWrap:'wrap', fontSize:'0.75rem', color:'#888', marginTop:'0.5rem'}}>
-              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(74,222,128,0.3)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>1-3</span>
-              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(163,230,53,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>4-7</span>
-              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(251,191,36,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>8-10</span>
-              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(249,115,22,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>11-15</span>
-              <span><span style={{display:'inline-block', width:'12px', height:'12px', background:'rgba(248,113,113,0.25)', borderRadius:'2px', marginRight:'4px', verticalAlign:'middle'}}></span>16-20</span>
+            <h3 style={{marginTop:0}}>Grid Map — "{rm.keyword}" <SourceInfo text={"DataForSEO Local Finder API\n8\u00D78 grid, 3mi radius\nChecks Google Maps rank at each point"} /></h3>
+            <RankMapLeaflet rm={rm} grid={grid} size={size} onSelectPoint={setDetailPoint} />
+            <div style={{display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'0.8rem', color:'#aaa', marginTop:'0.5rem'}}>
+              <span><span style={{display:'inline-block', width:'14px', height:'14px', background:'#16a34a', borderRadius:'50%', marginRight:'5px', verticalAlign:'middle'}}></span>Top 3 (Pack)</span>
+              <span><span style={{display:'inline-block', width:'14px', height:'14px', background:'#c2710c', borderRadius:'50%', marginRight:'5px', verticalAlign:'middle'}}></span>4-10</span>
+              <span><span style={{display:'inline-block', width:'14px', height:'14px', background:'#dc2626', borderRadius:'50%', marginRight:'5px', verticalAlign:'middle'}}></span>11+ / Not Ranked</span>
+              <span><span style={{display:'inline-block', width:'14px', height:'14px', background:'#444', borderRadius:'50%', marginRight:'5px', verticalAlign:'middle'}}></span>N/A (no results)</span>
             </div>
           </section>
 
           {/* Trend chart if multiple scans for same keyword */}
-          {rankMaps.filter(r => r.keyword === rm.keyword).length > 1 && (
+          {kwScans.length > 1 && (
             <section style={{marginBottom:'2rem'}}>
               <h3>Top-3% Trend — "{rm.keyword}"</h3>
               <Recharts.ResponsiveContainer width="100%" height={220}>
-                <Recharts.LineChart data={rankMaps.filter(r => r.keyword === rm.keyword).reverse().map(r => ({date:r.scan_date, top3:r.top_3_pct, avgRank:r.avg_rank}))}>
+                <Recharts.LineChart data={[...kwScans].reverse().map(r => ({date:r.scan_date, top3:r.top_3_pct, avgRank:r.avg_rank}))}>
                   <Recharts.CartesianGrid strokeDasharray="3 3" stroke="#333" />
                   <Recharts.XAxis dataKey="date" stroke="#888" />
                   <Recharts.YAxis stroke="#888" />
@@ -599,6 +989,96 @@
               </Recharts.ResponsiveContainer>
             </section>
           )}
+
+          {/* ── Detail Modal — full SERP results for a grid point ── */}
+          {detailPoint && (() => {
+            const dp = detailPoint;
+            const results = dp.topResults || [];
+            const bw = dp.bizWord || '';
+            const lat = dp.coord?.lat;
+            const lng = dp.coord?.lng;
+
+            return (
+              <div onClick={() => setDetailPoint(null)} style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, padding:'1rem'}}>
+                <div onClick={e => e.stopPropagation()} style={{background:'#1a1a1a', border:'1px solid #333', borderRadius:'12px', maxWidth:'560px', width:'100%', maxHeight:'85vh', overflow:'hidden', display:'flex', flexDirection:'column'}}>
+                  {/* Header */}
+                  <div style={{padding:'1.25rem 1.5rem', borderBottom:'1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0}}>
+                    <div>
+                      <div style={{fontWeight:700, fontSize:'1.1rem', color:'#EA9320'}}>
+                        Grid Point Results
+                      </div>
+                      <div style={{fontSize:'0.8rem', color:'#888', marginTop:'0.25rem'}}>
+                        {lat && lng ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : ''} — "{rm.keyword}"
+                      </div>
+                    </div>
+                    <div style={{display:'flex', alignItems:'center', gap:'1rem'}}>
+                      {dp.rank ? (() => {
+                        const rc = dp.rank <= 3 ? '#4ade80' : dp.rank <= 10 ? '#f59e0b' : '#f87171';
+                        return <div style={{textAlign:'center'}}>
+                          <div style={{fontSize:'0.65rem', color:'#888', textTransform:'uppercase'}}>Your Rank</div>
+                          <div style={{fontSize:'1.5rem', fontWeight:700, color:rc}}>#{dp.rank}</div>
+                        </div>;
+                      })() : <div style={{fontSize:'0.8rem', color:'#f87171', fontWeight:600}}>Not ranked</div>}
+                      <button onClick={() => setDetailPoint(null)} style={{background:'none', border:'none', color:'#888', fontSize:'1.5rem', cursor:'pointer', lineHeight:1}}>&times;</button>
+                    </div>
+                  </div>
+
+                  {/* Results list */}
+                  <div style={{overflowY:'auto', padding:'0', flex:1}}>
+                    {results.length === 0 ? (
+                      <div style={{padding:'2rem', textAlign:'center', color:'#888'}}>No results returned for this location</div>
+                    ) : (
+                      <table style={{width:'100%', fontSize:'0.85rem'}}>
+                        <thead>
+                          <tr style={{borderBottom:'1px solid #333'}}>
+                            <th style={{padding:'0.6rem 1rem', textAlign:'left', color:'#666', fontSize:'0.7rem', textTransform:'uppercase'}}>Rank</th>
+                            <th style={{padding:'0.6rem 0.5rem', textAlign:'left', color:'#666', fontSize:'0.7rem', textTransform:'uppercase'}}>Business</th>
+                            <th style={{padding:'0.6rem 0.5rem', textAlign:'right', color:'#666', fontSize:'0.7rem', textTransform:'uppercase'}}>Rating</th>
+                            <th style={{padding:'0.6rem 1rem', textAlign:'right', color:'#666', fontSize:'0.7rem', textTransform:'uppercase'}}>Reviews</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {results.map((r, i) => {
+                            const isUs = bw && r.title && r.title.toLowerCase().includes(bw);
+                            const rColor = r.rank <= 3 ? '#16a34a' : r.rank <= 10 ? '#f59e0b' : '#f87171';
+                            return (
+                              <tr key={i} style={{
+                                borderBottom:'1px solid #222',
+                                background: isUs ? 'rgba(234,147,32,0.12)' : (i % 2 === 0 ? '#1a1a1a' : '#161616'),
+                              }}>
+                                <td style={{padding:'0.6rem 1rem'}}>
+                                  <span style={{
+                                    display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                    width:'28px', height:'28px', borderRadius:'50%',
+                                    background: rColor + '22', color: rColor, fontWeight:700, fontSize:'0.85rem',
+                                  }}>
+                                    {r.rank}
+                                  </span>
+                                </td>
+                                <td style={{padding:'0.6rem 0.5rem'}}>
+                                  <div style={{fontWeight: isUs ? 700 : 500, color: isUs ? '#EA9320' : '#e0e0e0'}}>
+                                    {isUs && <span style={{color:'#EA9320', marginRight:'0.35rem'}}>&#9733;</span>}
+                                    {r.title || 'Unknown'}
+                                  </div>
+                                  {r.domain && <div style={{fontSize:'0.75rem', color:'#555', marginTop:'0.1rem'}}>{r.domain}</div>}
+                                </td>
+                                <td style={{padding:'0.6rem 0.5rem', textAlign:'right', whiteSpace:'nowrap'}}>
+                                  {r.rating ? <span style={{color:'#eab308'}}>{'★'.repeat(Math.round(r.rating))} <span style={{color:'#aaa'}}>{r.rating}</span></span> : <span style={{color:'#444'}}>—</span>}
+                                </td>
+                                <td style={{padding:'0.6rem 1rem', textAlign:'right', color:'#aaa'}}>
+                                  {r.reviews || '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       );
     }
@@ -614,23 +1094,23 @@
 
       return (
         <div>
-          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
-            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}>
-              <h3>Category Pages</h3>
+          <section style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'2px solid #4ade80'}}>
+              <h3>Category Pages <SourceInfo text={"Internal link crawler\nCrawls <a> tags from homepage, compares against checklist of 30 recommended pages"} /></h3>
               <div className="value">{core30.categories_found || 0}<span style={{fontSize:'1rem', color:'#888'}}>/{core30.categories_total || 0}</span></div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>{catPct}% coverage</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #60a5fa'}}>
+            <div className="score-card" style={{borderTop:'2px solid #60a5fa'}}>
               <h3>Service Pages</h3>
               <div className="value">{core30.services_found || 0}<span style={{fontSize:'1rem', color:'#888'}}>/{core30.services_total || 0}</span></div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>{svcPct}% coverage</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #f87171'}}>
+            <div className="score-card" style={{borderTop:'2px solid #f87171'}}>
               <h3>Missing</h3>
               <div className="value" style={{color:'#f87171'}}>{(core30.categories_missing||0) + (core30.services_missing||0)}</div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>pages to create</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #fbbf24'}}>
+            <div className="score-card" style={{borderTop:'2px solid #fbbf24'}}>
               <h3>Content Briefs</h3>
               <div className="value">{(contentBriefs||[]).length}</div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>ready to write</div>
@@ -692,13 +1172,13 @@
 
       return (
         <div>
-          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
-            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}>
-              <h3>Sections Found</h3>
+          <section style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'2px solid #4ade80'}}>
+              <h3>Sections Found <SourceInfo text={"HTTP crawl + regex detection\nFetches homepage HTML, checks 12 section patterns (hero, about, services, gallery, reviews, etc.)"} /></h3>
               <div className="value">{found}<span style={{fontSize:'1rem', color:'#888'}}>/{total}</span></div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>{pct}% complete</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #f87171'}}>
+            <div className="score-card" style={{borderTop:'2px solid #f87171'}}>
               <h3>Missing</h3>
               <div className="value" style={{color:'#f87171'}}>{missing}</div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>sections to add</div>
@@ -751,8 +1231,12 @@
       const [filterSev, setFilterSev] = React.useState('all');
       const [filterStat, setFilterStat] = React.useState('all');
       const [filterCat, setFilterCat] = React.useState('all');
+      const [selected, setSelected] = React.useState(null);
 
       const categories = [...new Set(latestFindings.map(f => f.category))].sort();
+      const openFindings = latestFindings.filter(f => f.status === 'open').length;
+      const critFindings = latestFindings.filter(f => f.severity === 'critical' && f.status !== 'fixed').length;
+      const fixedFindings = latestFindings.filter(f => f.status === 'fixed').length;
 
       const filtered = latestFindings
         .filter(f => filterSev === 'all' || f.severity === filterSev)
@@ -763,8 +1247,30 @@
           return (o[a.severity]||4)-(o[b.severity]||4);
         });
 
+      const statusIcon = s => s === 'fixed' ? '\u2705' : s === 'in_progress' ? '\u23F3' : '\u26A0\uFE0F';
+
       return (
         <div>
+          {/* Summary cards */}
+          <section style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop: openFindings > 0 ? '3px solid #f87171' : '3px solid #4ade80'}}>
+              <h3>Open Issues</h3>
+              <div className="value" style={{color: openFindings > 0 ? '#f87171' : '#4ade80'}}>{openFindings}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>{latestFindings.length} total findings</div>
+            </div>
+            <div className="score-card" style={{borderTop: critFindings > 0 ? '3px solid #ef4444' : '3px solid #4ade80'}}>
+              <h3>Critical</h3>
+              <div className="value" style={{color: critFindings > 0 ? '#ef4444' : '#4ade80'}}>{critFindings}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>{critFindings > 0 ? 'needs attention' : 'all clear'}</div>
+            </div>
+            <div className="score-card" style={{borderTop:'2px solid #4ade80'}}>
+              <h3>Fixed</h3>
+              <div className="value" style={{color:'#4ade80'}}>{fixedFindings}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>issues resolved</div>
+            </div>
+          </section>
+
+          {/* Filters */}
           <div style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap'}}>
             <select className="filter" value={filterSev} onChange={e=>setFilterSev(e.target.value)}>
               <option value="all">All Severities</option>
@@ -785,26 +1291,65 @@
             </select>
             <span style={{color:'#888', alignSelf:'center', fontSize:'0.85rem'}}>{filtered.length} finding{filtered.length!==1?'s':''}</span>
           </div>
-          <table>
-            <thead><tr><th>Sev</th><th>Title</th><th>Category</th><th>Layer</th><th>Page</th><th>Status</th><th>Effort</th><th>Age</th></tr></thead>
-            <tbody>
-            {filtered.map(f => {
-              const age = Math.floor((new Date() - new Date(f.still_open_since || f.first_detected || f.created_at)) / 86400000);
-              return (
-                <tr key={f.id} title={f.fix} style={{background: f.status==='fixed'?'rgba(74,222,128,0.06)':f.status==='in_progress'?'rgba(251,191,36,0.08)':'rgba(248,113,113,0.08)'}}>
-                  <td><span className="pill" style={{background:`${sevColor(f.severity)}22`, color:sevColor(f.severity)}}>{f.severity}</span></td>
-                  <td style={{fontWeight:500}}>{f.title}</td>
-                  <td style={{color:'#888'}}>{f.category}</td>
-                  <td style={{color:'#888'}}>{f.layer != null ? `L${f.layer}` : '\u2014'}</td>
-                  <td style={{fontFamily:'monospace', fontSize:'0.8rem'}}>{f.page || '\u2014'}</td>
-                  <td>{f.status}</td>
-                  <td>{f.effort_minutes ? f.effort_minutes+'m' : '\u2014'}</td>
-                  <td style={{color:'#888'}}>{age}d</td>
-                </tr>
-              );
-            })}
-            </tbody>
-          </table>
+
+          {/* Detail table */}
+          <section className="card" style={{border:'1px solid #222', padding:0, overflow:'hidden'}}>
+            <table style={{margin:0}}>
+              <thead><tr><th>Sev</th><th>Title</th><th>Category</th><th>Status</th><th>Effort</th><th>Age</th></tr></thead>
+              <tbody>
+              {filtered.map(f => {
+                const age = Math.floor((new Date() - new Date(f.still_open_since || f.first_detected || f.created_at)) / 86400000);
+                return (
+                  <tr key={f.id} onClick={() => setSelected(f)} style={{cursor:'pointer', background: f.status==='fixed'?'rgba(74,222,128,0.06)':f.status==='in_progress'?'rgba(251,191,36,0.08)':'rgba(248,113,113,0.08)'}}>
+                    <td><span className="pill" style={{background:`${sevColor(f.severity)}22`, color:sevColor(f.severity)}}>{f.severity}</span></td>
+                    <td style={{fontWeight:500}}>{f.title}</td>
+                    <td style={{color:'#888'}}>{f.category}</td>
+                    <td>
+                      <span className="pill" style={{background: f.status==='fixed'?'rgba(74,222,128,0.15)':f.status==='in_progress'?'rgba(251,191,36,0.15)':'rgba(248,113,113,0.15)', color: f.status==='fixed'?'#4ade80':f.status==='in_progress'?'#fbbf24':'#f87171'}}>
+                        {statusIcon(f.status)} {f.status}
+                      </span>
+                    </td>
+                    <td>{f.effort_minutes ? f.effort_minutes+'m' : '\u2014'}</td>
+                    <td style={{color:'#888'}}>{age}d</td>
+                  </tr>
+                );
+              })}
+              </tbody>
+            </table>
+          </section>
+
+          {/* Finding Detail Modal */}
+          {selected && (
+            <div onClick={() => setSelected(null)} style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, padding:'1rem'}}>
+              <div onClick={e => e.stopPropagation()} style={{background:'#1a1a1a', border:'1px solid #333', borderRadius:'12px', maxWidth:'600px', width:'100%', maxHeight:'85vh', overflow:'auto', padding:0}}>
+                {/* Header bar */}
+                <div style={{padding:'1.25rem 1.5rem', borderBottom:'1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                  <div>
+                    <span className="pill" style={{background:`${sevColor(selected.severity)}22`, color:sevColor(selected.severity), marginRight:'0.5rem'}}>{selected.severity.toUpperCase()}</span>
+                    <span style={{color:'#888', fontSize:'0.85rem'}}>{selected.category}</span>
+                    <h3 style={{margin:'0.5rem 0 0', fontSize:'1.2rem', lineHeight:'1.4'}}>{selected.title}</h3>
+                  </div>
+                  <button onClick={() => setSelected(null)} style={{background:'none', border:'none', color:'#888', fontSize:'1.5rem', cursor:'pointer', padding:'0 0.25rem', lineHeight:1}}>&times;</button>
+                </div>
+
+                {/* Meta row */}
+                <div style={{display:'flex', gap:'1.5rem', padding:'1rem 1.5rem', borderBottom:'1px solid #222', fontSize:'0.85rem', color:'#aaa', flexWrap:'wrap'}}>
+                  <div><span style={{color:'#666'}}>Status</span> <span style={{marginLeft:'0.25rem'}}>{statusIcon(selected.status)} {selected.status}</span></div>
+                  {selected.page && <div><span style={{color:'#666'}}>Page</span> <code style={{marginLeft:'0.25rem', background:'#222', padding:'0.1rem 0.4rem', borderRadius:'4px', fontSize:'0.8rem'}}>{selected.page}</code></div>}
+                  {selected.layer != null && <div><span style={{color:'#666'}}>Layer</span> <span style={{marginLeft:'0.25rem'}}>L{selected.layer}</span></div>}
+                  {selected.effort_minutes && <div><span style={{color:'#666'}}>Effort</span> <span style={{marginLeft:'0.25rem'}}>{selected.effort_minutes < 60 ? selected.effort_minutes + ' min' : Math.round(selected.effort_minutes/60*10)/10 + ' hr'}</span></div>}
+                </div>
+
+                {/* Fix instructions */}
+                <div style={{padding:'1.5rem'}}>
+                  <div style={{fontSize:'0.75rem', fontWeight:600, color:'#666', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'0.75rem'}}>What to do</div>
+                  <div style={{background:'#111', border:'1px solid #2a2a2a', borderRadius:'8px', padding:'1rem 1.25rem', lineHeight:'1.7', fontSize:'0.95rem', color:'#e0e0e0'}}>
+                    {selected.fix || 'No specific fix instructions recorded for this finding.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -828,32 +1373,25 @@
         gbp_embed: 'NAP & Contact',
       };
       const groupOrder = ['Schema & Structured Data', 'On-Page Local Signals', 'NAP & Contact'];
-      const groupColors = {
-        'Schema & Structured Data': '#a78bfa',
-        'On-Page Local Signals': '#fbbf24',
-        'NAP & Contact': '#60a5fa',
-      };
 
-      const grouped = {};
-      latestGeo.forEach(g => {
-        const group = groupMap[g.signal_name] || 'Other';
-        if (!grouped[group]) grouped[group] = [];
-        grouped[group].push(g);
+      // Sort: failing first within each group
+      const sorted = [...latestGeo].sort((a, b) => {
+        const ga = groupOrder.indexOf(groupMap[a.signal_name] || 'Other');
+        const gb = groupOrder.indexOf(groupMap[b.signal_name] || 'Other');
+        if (ga !== gb) return (ga === -1 ? 99 : ga) - (gb === -1 ? 99 : gb);
+        return (a.signal_value ? 1 : 0) - (b.signal_value ? 1 : 0);
       });
-
-      const sortedGroups = groupOrder.filter(g => grouped[g]).concat(
-        Object.keys(grouped).filter(g => !groupOrder.includes(g))
-      );
 
       return (
         <div>
-          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
-            <div className="score-card" style={{borderTop:'3px solid #f97316'}}>
+          {/* Summary cards */}
+          <section style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', flexWrap:'wrap'}}>
+            <div className="score-card" style={{borderTop:'2px solid #f97316'}}>
               <h3>GEO Score</h3>
-              <div className="value" style={{color:'#f97316'}}>{pct}</div>
+              <div className="value" style={{color:'#f97316'}}>{pct}%</div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>{passing}/{latestGeo.length} passing</div>
             </div>
-            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}>
+            <div className="score-card" style={{borderTop:'2px solid #4ade80'}}>
               <h3>Passing</h3>
               <div className="value" style={{color:'#4ade80'}}>{passing}</div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>signals detected</div>
@@ -865,42 +1403,185 @@
             </div>
           </section>
 
-          {sortedGroups.map(groupName => {
-            const signals = grouped[groupName];
-            const groupPass = signals.filter(g => g.signal_value).length;
-            const gc = groupColors[groupName] || '#888';
+          {/* Detail table */}
+          <section className="card" style={{border:'1px solid #222', padding:0, overflow:'hidden'}}>
+            <table style={{margin:0}}>
+              <thead><tr><th>Signal</th><th>Group</th><th>Status</th><th>Details / Fix</th></tr></thead>
+              <tbody>
+              {sorted.map(g => (
+                <tr key={g.id} style={{background: g.signal_value ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.08)'}}>
+                  <td style={{fontWeight:500, textTransform:'capitalize'}}>{g.signal_name.replace(/_/g,' ')}</td>
+                  <td style={{color:'#888', fontSize:'0.85rem'}}>{groupMap[g.signal_name] || 'Other'}</td>
+                  <td>
+                    <span className="pill" style={{background: g.signal_value ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)', color: g.signal_value ? '#4ade80' : '#f87171'}}>
+                      {g.signal_value ? '\u2713 Found' : '\u2717 Missing'}
+                    </span>
+                  </td>
+                  <td style={{fontSize:'0.85rem', maxWidth:'400px', color: g.signal_value ? '#9ca3af' : '#fca5a5'}}>
+                    {g.signal_value ? (g.details || 'Detected on page') : (g.recommendation || g.details || 'Signal not detected')}
+                  </td>
+                </tr>
+              ))}
+              </tbody>
+            </table>
+          </section>
+        </div>
+      );
+    }
 
-            return (
-              <section key={groupName} className="card" style={{marginBottom:'1.5rem', border:'1px solid #222'}}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
-                  <h3 style={{margin:0, color: gc}}>{groupName}</h3>
-                  <span style={{color:'#888', fontSize:'0.85rem'}}>{groupPass}/{signals.length} passing</span>
-                </div>
-                <div style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
-                  {signals.map(g => (
-                    <div key={g.id} style={{background:'#111', padding:'1rem', borderRadius:'6px', borderLeft: g.signal_value ? '3px solid #4ade80':'3px solid #f87171'}}>
-                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-                        <div style={{fontWeight:600, textTransform:'capitalize', fontSize:'0.95rem'}}>{g.signal_name.replace(/_/g,' ')}</div>
-                        <span className="pill" style={{background: g.signal_value ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)', color: g.signal_value ? '#4ade80' : '#f87171', flexShrink:0}}>
-                          {g.signal_value ? '\u2713 Found' : '\u2717 Missing'}
-                        </span>
-                      </div>
-                      {g.details && (
-                        <div style={{marginTop:'0.5rem', padding:'0.5rem 0.75rem', background:'#0a0a0a', borderRadius:'4px', fontFamily:'monospace', fontSize:'0.8rem', color: g.signal_value ? '#9ca3af' : '#fca5a5', wordBreak:'break-word'}}>
-                          {g.details}
-                        </div>
-                      )}
-                      {g.recommendation && (
-                        <div style={{marginTop:'0.5rem', fontSize:'0.85rem', color:'#d1d5db', lineHeight:'1.4'}}>
-                          <span style={{color:'#fbbf24', fontWeight:600, marginRight:'0.35rem'}}>Fix:</span>{g.recommendation}
-                        </div>
-                      )}
+    /* ── Tab: Clarity (UX Analytics) ──────────────────────── */
+    function ClarityTab({ clarityToken }) {
+      const [data, setData] = React.useState(null);
+      const [loading, setLoading] = React.useState(false);
+      const [error, setError] = React.useState(null);
+      const [days, setDays] = React.useState(3);
+
+      const fetchClarity = async (numDays) => {
+        if (!clarityToken) return;
+        setLoading(true); setError(null);
+        try {
+          const resp = await fetch(`https://www.clarity.ms/export-data/api/v1/project-live-insights?numOfDays=${numDays}&dimension1=Device`, {
+            headers: { 'Authorization': `Bearer ${clarityToken}`, 'Content-Type': 'application/json' },
+          });
+          if (!resp.ok) throw new Error(`Clarity API: ${resp.status}`);
+          const json = await resp.json();
+          const metrics = {};
+          json.forEach(m => { metrics[m.metricName] = m.information; });
+          setData(metrics);
+        } catch (e) { setError(e.message); }
+        setLoading(false);
+      };
+
+      React.useEffect(() => { fetchClarity(days); }, [clarityToken, days]);
+
+      if (!clarityToken) return (
+        <div className="card" style={{textAlign:'center', padding:'3rem'}}>
+          <h3 style={{color:'#888'}}>Microsoft Clarity not configured</h3>
+          <p style={{color:'#666'}}>Add your Clarity API token in Admin &rarr; Settings &rarr; API Keys</p>
+        </div>
+      );
+
+      if (loading) return <div className="card" style={{textAlign:'center', padding:'2rem'}}><p style={{color:'#888'}}>Loading Clarity data...</p></div>;
+      if (error) return <div className="card" style={{padding:'2rem'}}><p style={{color:'#f87171'}}>Error: {error}</p></div>;
+      if (!data) return null;
+
+      const traffic = data.Traffic?.[0] || {};
+      const engagement = data.EngagementTime?.[0] || {};
+      const scroll = data.ScrollDepth?.[0] || {};
+      const deadClicks = data.DeadClickCount?.[0] || {};
+      const rageClicks = data.RageClickCount?.[0] || {};
+      const quickbacks = data.QuickbackClick?.[0] || {};
+      const scriptErrors = data.ScriptErrorCount?.[0] || {};
+      const excessiveScroll = data.ExcessiveScroll?.[0] || {};
+
+      const metricCard = (label, value, sub, color, warn) => (
+        <div className="score-card" style={{borderTop:`3px solid ${color}`}}>
+          <h3>{label}</h3>
+          <div className="value" style={{color: warn ? '#f87171' : color}}>{value}</div>
+          {sub && <div style={{color:'#888', fontSize:'0.8rem'}}>{sub}</div>}
+        </div>
+      );
+
+      const pctBar = (label, pct, color) => (
+        <div style={{marginBottom:'0.75rem'}}>
+          <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', marginBottom:'0.25rem'}}>
+            <span style={{color:'#ccc'}}>{label}</span>
+            <span style={{color, fontWeight:600}}>{pct.toFixed(1)}%</span>
+          </div>
+          <div style={{background:'#1a1a1a', borderRadius:'4px', height:'8px', overflow:'hidden'}}>
+            <div style={{width:`${Math.min(pct, 100)}%`, height:'100%', background:color, borderRadius:'4px'}} />
+          </div>
+        </div>
+      );
+
+      return (
+        <div>
+          {/* Period selector */}
+          <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.5rem', alignItems:'center'}}>
+            <span style={{color:'#888', fontSize:'0.85rem'}}>Period:</span>
+            {[1, 2, 3].map(d => (
+              <button key={d} onClick={() => setDays(d)} style={{
+                padding:'0.3rem 0.8rem', borderRadius:'4px', cursor:'pointer', fontSize:'0.8rem',
+                background: days === d ? '#EA9320' : '#1a1a1a', color: days === d ? '#000' : '#888',
+                border: '1px solid ' + (days === d ? '#EA9320' : '#333'), fontWeight: days === d ? 700 : 400,
+              }}>{d * 24}h</button>
+            ))}
+            <button onClick={() => fetchClarity(days)} style={{marginLeft:'auto', padding:'0.3rem 0.8rem', borderRadius:'4px', cursor:'pointer', fontSize:'0.8rem', background:'#1a1a1a', color:'#888', border:'1px solid #333'}}>Refresh</button>
+          </div>
+
+          {/* Traffic Overview */}
+          <section style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap'}}>
+            {metricCard('Sessions', traffic.totalSessionCount || '0', `${traffic.distinctUserCount || 0} unique users`, '#60a5fa')}
+            {metricCard('Pages/Session', Number(traffic.pagesPerSessionPercentage || 0).toFixed(1), `${traffic.totalBotSessionCount || 0} bot sessions`, '#a78bfa')}
+            {metricCard('Avg Scroll', `${Math.round(scroll.averageScrollDepth || 0)}%`, null, '#4ade80')}
+            {metricCard('Engagement', `${engagement.activeTime || 0}s`, `${engagement.totalTime || 0}s total time`, '#fbbf24')}
+          </section>
+
+          {/* UX Issues */}
+          <section className="card" style={{marginBottom:'2rem'}}>
+            <h3 style={{marginTop:0}}>UX Signals</h3>
+            {pctBar('Dead Clicks', deadClicks.sessionsWithMetricPercentage || 0, deadClicks.sessionsWithMetricPercentage > 10 ? '#f87171' : '#4ade80')}
+            {pctBar('Rage Clicks', rageClicks.sessionsWithMetricPercentage || 0, rageClicks.sessionsWithMetricPercentage > 5 ? '#f87171' : '#4ade80')}
+            {pctBar('Quick-backs', quickbacks.sessionsWithMetricPercentage || 0, quickbacks.sessionsWithMetricPercentage > 15 ? '#f87171' : '#fbbf24')}
+            {pctBar('Excessive Scrolling', excessiveScroll.sessionsWithMetricPercentage || 0, excessiveScroll.sessionsWithMetricPercentage > 10 ? '#f87171' : '#4ade80')}
+            {pctBar('Script Errors', scriptErrors.sessionsWithMetricPercentage || 0, scriptErrors.sessionsWithMetricPercentage > 5 ? '#f87171' : '#4ade80')}
+          </section>
+
+          {/* Device breakdown */}
+          {data.Device && data.Device.length > 0 && (
+            <section className="card" style={{marginBottom:'2rem'}}>
+              <h3 style={{marginTop:0}}>Device Breakdown</h3>
+              <div style={{display:'flex', gap:'1rem', flexWrap:'wrap'}}>
+                {data.Device.map((d, i) => {
+                  const total = data.Device.reduce((s, x) => s + Number(x.sessionsCount || 0), 0);
+                  const pct = total > 0 ? (Number(d.sessionsCount) / total * 100) : 0;
+                  return (
+                    <div key={i} style={{flex:1, minWidth:'120px', background:'#111', padding:'1rem', borderRadius:'6px', textAlign:'center'}}>
+                      <div style={{fontSize:'0.8rem', color:'#888', marginBottom:'0.25rem'}}>{d.Device || d.name || 'Unknown'}</div>
+                      <div style={{fontSize:'1.5rem', fontWeight:700}}>{d.sessionsCount}</div>
+                      <div style={{fontSize:'0.75rem', color:'#555'}}>{pct.toFixed(0)}%</div>
                     </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Popular Pages */}
+          {data.PopularPages && data.PopularPages.length > 0 && (
+            <section className="card" style={{marginBottom:'2rem'}}>
+              <h3 style={{marginTop:0}}>Popular Pages</h3>
+              <table>
+                <thead><tr><th>Page</th><th style={{textAlign:'right'}}>Visits</th></tr></thead>
+                <tbody>
+                  {data.PopularPages.sort((a, b) => Number(b.visitsCount) - Number(a.visitsCount)).map((p, i) => (
+                    <tr key={i}>
+                      <td style={{fontFamily:'monospace', fontSize:'0.8rem'}}>{(p.url || '').replace(/^https?:\/\/[^/]+/, '') || '/'}</td>
+                      <td style={{textAlign:'right', fontWeight:600}}>{p.visitsCount}</td>
+                    </tr>
                   ))}
-                </div>
-              </section>
-            );
-          })}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {/* Referrers */}
+          {data.ReferrerUrl && data.ReferrerUrl.length > 0 && (
+            <section className="card">
+              <h3 style={{marginTop:0}}>Top Referrers</h3>
+              <table>
+                <thead><tr><th>Source</th><th style={{textAlign:'right'}}>Sessions</th></tr></thead>
+                <tbody>
+                  {data.ReferrerUrl.sort((a, b) => Number(b.sessionsCount) - Number(a.sessionsCount)).map((r, i) => (
+                    <tr key={i}>
+                      <td style={{fontSize:'0.85rem'}}>{r.name || 'Direct'}</td>
+                      <td style={{textAlign:'right', fontWeight:600}}>{r.sessionsCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
         </div>
       );
     }
@@ -912,8 +1593,8 @@
       const total = aiMentions.length;
       const mentioned = aiMentions.filter(m => m.mentioned).length;
       const aiPct = total > 0 ? Math.round(mentioned / total * 100) : 0;
+      const notMentioned = total - mentioned;
       const probeDate = aiMentions[0]?.probe_date || aiMentions[0]?.created_at?.split('T')[0] || '';
-      const probeTime = aiMentions[0]?.created_at ? new Date(aiMentions[0].created_at).toLocaleTimeString() : '';
 
       // Engine breakdown
       const engines = [...new Set(aiMentions.map(m => m.engine))];
@@ -933,36 +1614,43 @@
 
       return (
         <div>
-          <section style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', flexWrap:'wrap', alignItems:'flex-start'}}>
+          {/* Summary cards */}
+          <section style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', flexWrap:'wrap'}}>
             <div className="score-card" style={{borderTop:`3px solid ${aiPct >= 60 ? '#4ade80' : aiPct >= 30 ? '#fbbf24' : '#f87171'}`}}>
               <h3>AI Score</h3>
               <div className="value" style={{color: aiPct >= 60 ? '#4ade80' : aiPct >= 30 ? '#fbbf24' : '#f87171'}}>{aiPct}%</div>
               <div style={{color:'#888', fontSize:'0.85rem'}}>{mentioned}/{total} probes</div>
             </div>
-            {byEngine.map(e => (
-              <div key={e.engine} className="score-card" style={{borderTop:'3px solid #555'}}>
-                <h3 style={{textTransform:'capitalize'}}>{e.engine}</h3>
-                <div className="value">{e.mentioned}<span style={{fontSize:'1rem', color:'#888'}}>/{e.total}</span></div>
-                <div style={{color:'#888', fontSize:'0.85rem'}}>{Math.round(e.mentioned/e.total*100)}% found</div>
-              </div>
-            ))}
+            <div className="score-card" style={{borderTop:'2px solid #4ade80'}}>
+              <h3>Mentioned</h3>
+              <div className="value" style={{color:'#4ade80'}}>{mentioned}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>probes found you</div>
+            </div>
+            <div className="score-card" style={{borderTop: notMentioned > 0 ? '3px solid #f87171' : '3px solid #4ade80'}}>
+              <h3>Not Found</h3>
+              <div className="value" style={{color: notMentioned > 0 ? '#f87171' : '#4ade80'}}>{notMentioned}</div>
+              <div style={{color:'#888', fontSize:'0.85rem'}}>{notMentioned > 0 ? 'probes missed you' : 'all clear'}</div>
+            </div>
           </section>
 
-          {probeDate && <p style={{color:'#666', fontSize:'0.8rem', marginBottom:'1rem'}}>Probed: {probeDate}{probeTime ? ` at ${probeTime}` : ''}</p>}
+          {probeDate && <p style={{color:'#666', fontSize:'0.8rem', marginBottom:'0.75rem'}}>Last probed: {probeDate}</p>}
 
-          <table>
-            <thead><tr><th>Engine</th><th>Query</th><th>Mentioned?</th><th>NAP</th><th>Sentiment</th><th>AI Results (ranked)</th></tr></thead>
-            <tbody>
-              {aiMentions.map(m => {
-                const clip = m.mentioned ? m.mention_text : (m.raw_response ? m.raw_response.substring(0, 200) : null);
-                return (
-                  <React.Fragment key={m.id}>
-                    <tr style={{background: m.mentioned?'rgba(74,222,128,0.06)':'rgba(248,113,113,0.08)', borderBottom: clip ? 'none' : undefined}}>
+          {/* Detail table */}
+          <section className="card" style={{border:'1px solid #222', padding:0, overflow:'hidden', marginBottom:'1.5rem'}}>
+            <table style={{margin:0}}>
+              <thead><tr><th>Engine</th><th>Query</th><th>Status</th><th>Sentiment</th><th>AI Results (ranked)</th></tr></thead>
+              <tbody>
+                {aiMentions.map(m => {
+                  return (
+                    <tr key={m.id} style={{background: m.mentioned?'rgba(74,222,128,0.06)':'rgba(248,113,113,0.08)'}}>
                       <td style={{textTransform:'capitalize'}}>{m.engine}</td>
-                      <td>{m.query}</td>
-                      <td style={{color: m.mentioned?'#4ade80':'#f87171'}}>{m.mentioned?'Yes':'No'}</td>
-                      <td style={{color: m.nap_accurate?'#4ade80':m.nap_accurate===false?'#f87171':'#888'}}>{m.nap_accurate==null?'\u2014':m.nap_accurate?'Yes':'No'}</td>
-                      <td>{m.sentiment||'\u2014'}</td>
+                      <td style={{fontSize:'0.85rem'}}>{m.query}</td>
+                      <td>
+                        <span className="pill" style={{background: m.mentioned ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)', color: m.mentioned ? '#4ade80' : '#f87171'}}>
+                          {m.mentioned ? '\u2713 Found' : '\u2717 Not found'}
+                        </span>
+                      </td>
+                      <td style={{color:'#aaa'}}>{m.sentiment||'\u2014'}</td>
                       <td style={{fontSize:'0.8rem', maxWidth:'300px'}}>
                         {m.competitors && m.competitors.length > 0 ? m.competitors.map((c, ci) => {
                           const nameLower = (businessName || '').toLowerCase();
@@ -972,21 +1660,14 @@
                         }) : '\u2014'}
                       </td>
                     </tr>
-                    {clip && (
-                      <tr style={{background: m.mentioned?'rgba(74,222,128,0.03)':'rgba(248,113,113,0.04)'}}>
-                        <td colSpan={6} style={{fontSize:'0.75rem', color:'#777', padding:'0.25rem 1rem 0.6rem 1rem', borderTop:'none', fontStyle:'italic'}}>
-                          {clip}{clip.length >= 200 ? '...' : ''}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                  );
+                })}
+              </tbody>
+            </table>
+          </section>
 
           {competitorList.length > 0 && (
-            <section className="card" style={{marginTop:'1.5rem'}}>
+            <section className="card" style={{border:'1px solid #222'}}>
               <h3 style={{marginTop:0}}>Competitors Appearing in AI Results</h3>
               <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap'}}>
                 {competitorList.map(([name, count]) => (
@@ -1001,47 +1682,82 @@
       );
     }
 
-    /* ── Tab: Link Checklist ─────────────────────────────── */
-    function LinkChecklistTab({ links }) {
-      if (!links || links.length === 0) return <p style={{color:'#888'}}>No link checklist generated. Run a full audit to populate.</p>;
-      const [filterType, setFilterType] = React.useState('all');
-      const types = [...new Set(links.map(l => l.link_type))].sort();
-      const filtered = links.filter(l => filterType === 'all' || l.link_type === filterType);
-      const done = links.filter(l => l.status === 'done').length;
+    /* ── Tab: Insights (combined Findings + GEO + AI) ────── */
+    function InsightsTab({ latestFindings, latestGeo, aiMentions, businessName, locationId, onRefresh }) {
+      const [sub, setSub] = React.useState('findings');
+
+      const openFindings = latestFindings.filter(f => f.status === 'open').length;
+      const fixedFindings = latestFindings.filter(f => f.status === 'fixed').length;
+      const geoPass = latestGeo.filter(g => g.signal_value).length;
+      const geoPct = latestGeo.length > 0 ? Math.round(geoPass / latestGeo.length * 100) : null;
+      const aiMentioned = aiMentions.filter(m => m.mentioned).length;
+      const aiPct = aiMentions.length > 0 ? Math.round(aiMentioned / aiMentions.length * 100) : null;
+
+      const tabs = [
+        {
+          id: 'findings', icon: '\u26A0\uFE0F', label: 'Findings', source: 'Rule engine\nAnalyzes all audit signals and generates actionable findings',
+          value: openFindings, valueLabel: 'open',
+          sub: `${fixedFindings} fixed, ${latestFindings.length} total`,
+          color: '#EA9320', alertColor: openFindings > 0 ? '#f87171' : '#4ade80',
+        },
+        {
+          id: 'geo', icon: '\uD83D\uDCCD', label: 'GEO Signals', source: 'NAP + Schema detection\nHTTP crawl checks JSON-LD, NAP text, city refs, OG tags, GBP embed',
+          value: geoPct != null ? geoPct + '%' : '--',  valueLabel: 'pass rate',
+          sub: `${geoPass}/${latestGeo.length} signals passing`,
+          color: '#f97316', alertColor: geoPct >= 70 ? '#4ade80' : geoPct >= 40 ? '#fbbf24' : '#f87171',
+        },
+        {
+          id: 'ai', icon: '\uD83E\uDD16', label: 'AI Mentions', source: 'Perplexity + OpenAI ChatGPT\n18 probes across 2 AI engines, checks if business is mentioned',
+          value: aiPct != null ? aiPct + '%' : '--', valueLabel: 'found',
+          sub: `${aiMentioned}/${aiMentions.length} probes mentioned`,
+          color: '#a78bfa', alertColor: aiPct >= 60 ? '#4ade80' : aiPct >= 30 ? '#fbbf24' : '#f87171',
+        },
+      ];
 
       return (
         <div>
-          <div style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', alignItems:'center', flexWrap:'wrap'}}>
-            <div className="score-card" style={{maxWidth:'200px', borderTop:'3px solid #EA9320'}}>
-              <h3>Links Built</h3>
-              <div className="value">{done}<span style={{fontSize:'1rem', color:'#888'}}>/{links.length}</span></div>
-            </div>
-            <select className="filter" value={filterType} onChange={e => setFilterType(e.target.value)}>
-              <option value="all">All Types</option>
-              {types.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
-            </select>
+          {/* Card-style sub-tabs */}
+          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'0.75rem', marginBottom:'2rem'}}>
+            {tabs.map(t => {
+              const active = sub === t.id;
+              return (
+                <button key={t.id} onClick={() => setSub(t.id)} style={{
+                  background: active ? `${t.color}22` : `${t.color}0d`,
+                  border: active ? `2px solid ${t.color}` : `1px solid ${t.color}44`,
+                  borderRadius:'10px', padding:'1rem', cursor:'pointer', textAlign:'left',
+                  transition:'all 0.15s', position:'relative', overflow:'hidden',
+                  boxShadow: active ? `0 0 12px ${t.color}33` : 'none',
+                }}>
+                  {/* Top indicator bar — always visible, brighter when active */}
+                  <div style={{position:'absolute', top:0, left:0, right:0, height:'3px', background:t.color, opacity: active ? 1 : 0.4}} />
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.5rem'}}>
+                    <span style={{fontSize:'1.3rem'}}>{t.icon}</span>
+                    <span style={{
+                      fontSize:'1.4rem', fontWeight:700, color: t.alertColor,
+                      fontFamily:'Roboto Slab, serif', lineHeight:1,
+                    }}>{t.value}</span>
+                  </div>
+                  <div style={{fontWeight:700, fontSize:'0.9rem', color: active ? '#fafafa' : '#ddd', marginBottom:'0.2rem'}}>
+                    {t.label} {t.source && <SourceInfo text={t.source} />}
+                  </div>
+                  <div style={{fontSize:'0.75rem', color: active ? '#aaa' : '#888'}}>
+                    {t.sub}
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          <table>
-            <thead><tr><th>Priority</th><th>Type</th><th>Title</th><th>Target</th><th>Cost</th><th>Status</th></tr></thead>
-            <tbody>
-              {filtered.sort((a,b)=>(a.priority||99)-(b.priority||99)).map(l => (
-                <tr key={l.id} style={{background: l.status==='done'?'rgba(74,222,128,0.06)':'rgba(248,113,113,0.08)'}}>
-                  <td><span className="pill" style={{background:l.priority<=2?'rgba(239,68,68,0.2)':l.priority<=5?'rgba(251,191,36,0.2)':'rgba(96,165,250,0.2)', color:l.priority<=2?'#f87171':l.priority<=5?'#fbbf24':'#60a5fa'}}>P{l.priority}</span></td>
-                  <td style={{textTransform:'capitalize'}}>{(l.link_type||'').replace(/_/g,' ')}</td>
-                  <td style={{fontWeight:500}}>{l.title}</td>
-                  <td style={{fontSize:'0.8rem'}}>{(l.target_url || l.target_page) ? <a href={l.target_url || l.target_page} target="_blank" rel="noopener noreferrer" style={{color:'#EA9320', textDecoration:'none'}}>{(l.target_url || l.target_page).replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</a> : '\u2014'}</td>
-                  <td>{l.estimated_cost || 'Free'}</td>
-                  <td style={{textTransform:'capitalize'}}>{l.status || 'pending'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {sub === 'findings' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="findings" label="Re-scan" onRefresh={() => onRefresh('findings')} />}</div><FindingsTab latestFindings={latestFindings} /></React.Fragment>}
+          {sub === 'geo' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="geo" label="Re-scan" onRefresh={() => onRefresh('geo')} />}</div><GeoTab latestGeo={latestGeo} /></React.Fragment>}
+          {sub === 'ai' && <React.Fragment><div style={{display:'flex', justifyContent:'flex-end', marginBottom:'0.75rem'}}>{locationId && <FetchNewButton locationId={locationId} section="ai" label="Re-scan" onRefresh={() => onRefresh('ai')} />}</div><AITab aiMentions={aiMentions} businessName={businessName} /></React.Fragment>}
         </div>
       );
     }
 
+    /* ── (LinkChecklistTab removed — merged into DirectoryTab below) ── */
+
     /* ── Tab: Competitors ────────────────────────────────── */
-    function CompetitorsTab({ competitors, site, aiMentions }) {
+    function CompetitorsTab({ competitors, site, aiMentions, locationId, onRefresh }) {
       if (!competitors || competitors.length === 0) return <p style={{color:'#888'}}>No competitor data yet. Run the AI prober and competitor intelligence scraper to populate.</p>;
 
       // Parse notes JSON and separate client vs competitors
@@ -1051,13 +1767,17 @@
         return { ...c, intel };
       });
       const clientRow = all.find(c => c.intel.is_client);
-      const compRows = all.filter(c => !c.intel.is_client && c.intel.source === 'ai_probes').sort((a, b) => {
+      const compRows = all.filter(c => !c.intel.is_client).sort((a, b) => {
+        // Sort by: rank map top3 pct descending, then AI mentions, then above_client
+        const aMap = a.intel.rank_map_top3_pct || 0, bMap = b.intel.rank_map_top3_pct || 0;
+        if (bMap !== aMap) return bMap - aMap;
         const am = a.intel.ai_mentions || 0, bm = b.intel.ai_mentions || 0;
         if (bm !== am) return bm - am;
         return (b.intel.above_client || 0) - (a.intel.above_client || 0);
       });
 
       const aboveCount = compRows.filter(c => (c.intel.above_client || 0) > 0).length;
+      const mapCount = compRows.filter(c => c.intel.from_rank_map).length;
       const fmt = n => n ? n.toLocaleString() : '\u2014';
 
       // Helper: render social cell for a row
@@ -1086,9 +1806,12 @@
 
       return (
         <div>
-          <h3>Competitive Intelligence — {site.target_city || site.city}</h3>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem'}}>
+            <h3 style={{margin:0}}>Competitive Intelligence — {site.target_city || site.city} <SourceInfo text={"Perplexity API (discovery) + Apify (social/review scraping)\n+ DataForSEO rank map grid data\nAI probes find competitors, Apify scrapes stats, rank map shows who outranks locally"} /></h3>
+            {locationId && <FetchNewButton locationId={locationId} section="competitors" label="Refresh" onRefresh={onRefresh} />}
+          </div>
           <p style={{color:'#888', fontSize:'0.85rem', marginBottom:'1rem'}}>
-            {compRows.length} competitors found across AI probes. <span style={{color:'#f87171'}}>{aboveCount} rank above you</span> in AI results.
+            {compRows.length} competitors found. <span style={{color:'#f87171'}}>{aboveCount} rank above you</span> in AI results. <span style={{color:'#60a5fa'}}>{mapCount} appear</span> in map top 3.
           </p>
 
           <table>
@@ -1098,6 +1821,7 @@
               <th>Website</th>
               <th>Social Media</th>
               <th>Reviews</th>
+              <th>Map Top 3</th>
               <th>AI Mentions</th>
               <th>Ranks Above</th>
             </tr></thead>
@@ -1110,6 +1834,7 @@
                   <td>{clientRow.domain ? <a href={'https://'+clientRow.domain} target="_blank" rel="noopener" style={{color:'#EA9320', fontSize:'0.85rem'}}>{clientRow.domain}</a> : '\u2014'}</td>
                   <td style={{fontSize:'0.8rem'}}><SocialCell intel={clientRow.intel} /></td>
                   <td style={{fontSize:'0.8rem'}}><ReviewCell intel={clientRow.intel} review_rating={clientRow.review_rating} review_count={clientRow.review_count} /></td>
+                  <td style={{textAlign:'center'}}>{clientRow.intel.rank_map_top3_pct ? <span className="pill" style={{background:'rgba(96,165,250,0.2)', color:'#60a5fa'}}>{clientRow.intel.rank_map_top3_pct}%</span> : '\u2014'}</td>
                   <td style={{textAlign:'center'}}>{'\u2014'}</td>
                   <td style={{textAlign:'center'}}>{'\u2014'}</td>
                 </tr>
@@ -1117,7 +1842,8 @@
               {compRows.map((c, idx) => {
                 const above = c.intel.above_client || 0;
                 const mentions = c.intel.ai_mentions || 0;
-                const bgColor = above > 0 ? 'rgba(248,113,113,0.08)' : 'rgba(74,222,128,0.04)';
+                const mapPct = c.intel.rank_map_top3_pct || 0;
+                const bgColor = above > 0 ? 'rgba(248,113,113,0.08)' : mapPct >= 20 ? 'rgba(96,165,250,0.06)' : 'rgba(74,222,128,0.04)';
                 return (
                   <tr key={c.id} style={{background: bgColor}}>
                     <td style={{color:'#888', fontSize:'0.8rem'}}>{idx + 1}</td>
@@ -1125,8 +1851,9 @@
                     <td>{c.domain ? <a href={'https://'+c.domain} target="_blank" rel="noopener" style={{color:'#EA9320', fontSize:'0.85rem'}}>{c.domain}</a> : <span style={{color:'#555'}}>not found</span>}</td>
                     <td style={{fontSize:'0.8rem'}}><SocialCell intel={c.intel} /></td>
                     <td style={{fontSize:'0.8rem'}}><ReviewCell intel={c.intel} review_rating={c.review_rating} review_count={c.review_count} /></td>
-                    <td style={{textAlign:'center'}}><span className="pill" style={{background:'rgba(234,147,32,0.15)', color:'#EA9320'}}>{mentions}x</span></td>
-                    <td style={{textAlign:'center'}}>{above > 0 ? <span className="pill" style={{background:'rgba(248,113,113,0.2)', color:'#f87171'}}>{above}x</span> : <span style={{color:'#4ade80', fontSize:'0.85rem'}}>below</span>}</td>
+                    <td style={{textAlign:'center'}}>{c.intel.rank_map_top3_pct ? <span className="pill" style={{background:'rgba(96,165,250,0.2)', color:'#60a5fa'}}>{c.intel.rank_map_top3_pct}%</span> : <span style={{color:'#555'}}>{'\u2014'}</span>}</td>
+                    <td style={{textAlign:'center'}}>{mentions > 0 ? <span className="pill" style={{background:'rgba(234,147,32,0.15)', color:'#EA9320'}}>{mentions}x</span> : <span style={{color:'#555'}}>{'\u2014'}</span>}</td>
+                    <td style={{textAlign:'center'}}>{above > 0 ? <span className="pill" style={{background:'rgba(248,113,113,0.2)', color:'#f87171'}}>{above}x</span> : mentions > 0 ? <span style={{color:'#4ade80', fontSize:'0.85rem'}}>below</span> : <span style={{color:'#555'}}>{'\u2014'}</span>}</td>
                   </tr>
                 );
               })}
@@ -1140,8 +1867,8 @@
       );
     }
 
-    /* ── Tab: Directory Listings ──────────────────────────── */
-    function DirectoryTab({ listings, site }) {
+    /* ── Tab: Directories & Links (merged) ──────────────── */
+    function DirectoryTab({ listings, site, locationId, onRefresh, links }) {
       const [filterStatus, setFilterStatus] = React.useState('all');
       const [filterTier, setFilterTier] = React.useState('all');
 
@@ -1218,11 +1945,12 @@
 
       return (
         <div>
-          <section style={{display:'flex', gap:'1rem', marginBottom:'2rem', flexWrap:'wrap'}}>
-            <div className="score-card" style={{borderTop:'3px solid #4ade80'}}><h3>Listed</h3><div className="value" style={{color:'#4ade80'}}>{listed}</div></div>
-            <div className="score-card" style={{borderTop:'3px solid #fbbf24'}}><h3>Needs Fix</h3><div className="value" style={{color:'#fbbf24'}}>{needsAtt}</div></div>
-            <div className="score-card" style={{borderTop:'3px solid #f87171'}}><h3>Not Listed</h3><div className="value" style={{color:'#f87171'}}>{notListed}</div></div>
-            <div className="score-card" style={{borderTop:'3px solid #60a5fa'}}><h3>NAP Match</h3><div className="value" style={{color: napPct >= 80 ? '#4ade80' : napPct >= 50 ? '#fbbf24' : '#f87171'}}>{napPct}%</div><div style={{fontSize:'0.75rem',color:'#888'}}>{napClean}/{withNap.length} consistent</div></div>
+          <section style={{display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap', alignItems:'center'}}>
+            <div className="score-card" style={{borderTop:'2px solid #4ade80'}}><h3>Listed <SourceInfo text={"Directory audit + HTTP verification\nChecks 25+ platforms for business presence, NAP consistency"} /></h3><div className="value" style={{color:'#4ade80'}}>{listed}</div></div>
+            <div className="score-card" style={{borderTop:'2px solid #fbbf24'}}><h3>Needs Fix</h3><div className="value" style={{color:'#fbbf24'}}>{needsAtt}</div></div>
+            <div className="score-card" style={{borderTop:'2px solid #f87171'}}><h3>Not Listed</h3><div className="value" style={{color:'#f87171'}}>{notListed}</div></div>
+            <div className="score-card" style={{borderTop:'2px solid #60a5fa'}}><h3>NAP</h3><div className="value" style={{color: napPct >= 80 ? '#4ade80' : napPct >= 50 ? '#fbbf24' : '#f87171'}}>{napPct}%</div></div>
+            {locationId && <FetchNewButton locationId={locationId} section="directories" label="Verify Listings" onRefresh={onRefresh} />}
           </section>
           {napIssues > 0 && (
             <div className="card" style={{marginBottom:'1.5rem', padding:'1rem', border:'1px solid rgba(251,191,36,0.3)', background:'rgba(251,191,36,0.05)'}}>
@@ -1269,22 +1997,82 @@
                     <td>
                       {l.listing_url && <a href={l.listing_url} target="_blank" rel="noopener" style={{color:'#4ade80', marginRight: claimUrl ? '0.5rem' : 0}}>View</a>}
                       {claimUrl && (l.status !== 'listed') && <a href={claimUrl} target="_blank" rel="noopener" style={{color:'#EA9320'}}>{l.status === 'needs_claim' ? 'Claim' : l.status === 'not_listed' ? 'Register' : 'Update'}</a>}
-                      {!l.listing_url && !(claimUrl && l.status !== 'listed') && '\u2014'}
+                      {claimUrl && l.status === 'listed' && !l.listing_url && <a href={claimUrl} target="_blank" rel="noopener" style={{color:'#60a5fa'}}>Manage</a>}
+                      {!l.listing_url && !claimUrl && '\u2014'}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+
+          {/* ── Link Building Opportunities ── */}
+          {links && links.length > 0 && (() => {
+            // Deduplicate: remove link_checklist items that overlap with directory_listings
+            const dirPlatforms = new Set((listings || []).map(l => l.platform.toLowerCase().replace(/[\s_-]+/g, '')));
+            const deduped = links.filter(l => {
+              if (l.link_type !== 'directory') return true;
+              const titleKey = (l.title || '').toLowerCase().replace(/[\s_-]+/g, '');
+              return !dirPlatforms.has(titleKey);
+            });
+            if (deduped.length === 0) return null;
+
+            const typeColors = { authority: '#a78bfa', directory: '#60a5fa', sponsorship: '#4ade80', content: '#fbbf24', outreach: '#f97316' };
+            const typeIcons = { authority: '\uD83C\uDFDB', directory: '\uD83D\uDCD6', sponsorship: '\uD83E\uDD1D', content: '\u270D\uFE0F', outreach: '\uD83D\uDCE7' };
+            const done = deduped.filter(l => l.status === 'done').length;
+
+            return (
+              <div style={{marginTop:'2.5rem', paddingTop:'1.5rem', borderTop:'1px solid #333'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+                  <h3 style={{margin:0}}>Link Building Opportunities</h3>
+                  <span style={{color:'#888', fontSize:'0.85rem'}}>{done}/{deduped.length} complete</span>
+                </div>
+                <table>
+                  <thead><tr><th>Priority</th><th>Type</th><th>Title</th><th>Target</th><th>Cost</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {deduped.sort((a,b)=>(a.priority||99)-(b.priority||99)).map(l => {
+                      const color = typeColors[l.link_type] || '#888';
+                      return (
+                        <tr key={l.id} style={{background: l.status==='done'?'rgba(74,222,128,0.06)':'rgba(248,113,113,0.08)'}}>
+                          <td><span className="pill" style={{background:l.priority<=2?'rgba(239,68,68,0.2)':l.priority<=5?'rgba(251,191,36,0.2)':'rgba(96,165,250,0.2)', color:l.priority<=2?'#f87171':l.priority<=5?'#fbbf24':'#60a5fa'}}>P{l.priority}</span></td>
+                          <td><span style={{color, fontSize:'0.85rem'}}>{typeIcons[l.link_type] || '\uD83D\uDD17'} {(l.link_type||'').replace(/_/g,' ')}</span></td>
+                          <td style={{fontWeight:500}}>{l.title}</td>
+                          <td style={{fontSize:'0.8rem'}}>{(l.target_url || l.target_page) ? <a href={l.target_url || l.target_page} target="_blank" rel="noopener noreferrer" style={{color:'#EA9320', textDecoration:'none'}}>{(l.target_url || l.target_page).replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</a> : '\u2014'}</td>
+                          <td>{l.estimated_cost || 'Free'}</td>
+                          <td style={{textTransform:'capitalize'}}>{l.status || 'pending'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       );
     }
 
     /* ── Settings Panel ──────────────────────────────────── */
-    function SettingsPanel({ site, open, onClose, billingRecords, usageLogs, locationId, lastAuditDate, onAuditStarted }) {
+    function AdminPanel({ site, open, onClose, billingRecords, usageLogs, locationId, lastAuditDate, onAuditStarted, audits, findings, geoSignals, aiMentions, rankMaps }) {
+      const [adminTab, setAdminTab] = React.useState('runs');
       const [saving, setSaving] = React.useState(false);
       const [saved, setSaved] = React.useState(false);
       const [auditStatus, setAuditStatus] = React.useState('idle');
+
+      // Auto-detect if an audit is currently running
+      React.useEffect(() => {
+        if (!locationId) return;
+        (async () => {
+          try {
+            const { data } = await db.from('audit_progress').select('step,pct')
+              .eq('location_id', locationId).order('created_at', { ascending: false }).limit(1);
+            if (data && data.length > 0 && data[0].step !== 'complete' && data[0].step !== 'error') {
+              setAuditStatus('running');
+            }
+          } catch (e) { /* ignore */ }
+        })();
+      }, [locationId]);
+
       const social = site.social_links || {};
       const [form, setForm] = React.useState({
         domain: site.domain || '',
@@ -1297,6 +2085,7 @@
         tt: social.tiktok || '',
         google_url: social.google_url || '',
         yelp_url: social.yelp_url || '',
+        clarity_token: social.clarity_token || '',
       });
 
       const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1313,6 +2102,7 @@
             social_links: {
               instagram: form.ig, facebook: form.fb, tiktok: form.tt,
               google_url: form.google_url, yelp_url: form.yelp_url,
+              clarity_token: form.clarity_token || null,
             },
           }).eq('id', site.id);
           setSaved(true);
@@ -1335,165 +2125,477 @@
 
       if (!open) return null;
 
-      const totalAudits = billingRecords.length;
-      const totalCharged = billingRecords.reduce((s, b) => s + Number(b.charge_amount || 0), 0);
-      const totalCost = billingRecords.reduce((s, b) => s + Number(b.total_cost || 0), 0);
-
       const inputStyle = { background:'#111', color:'#fafafa', border:'1px solid #333', padding:'0.4rem 0.6rem', borderRadius:'4px', width:'100%', fontFamily:'Roboto, sans-serif', fontSize:'0.85rem', boxSizing:'border-box' };
       const labelStyle = { color:'#888', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'0.25rem', display:'block' };
+      const adminTabBtn = (id, label) => (
+        <button key={id} onClick={() => setAdminTab(id)} style={{
+          padding:'0.5rem 1rem', background: adminTab === id ? '#EA9320' : 'transparent',
+          color: adminTab === id ? '#000' : '#888', border:'1px solid ' + (adminTab === id ? '#EA9320' : '#333'),
+          borderRadius:'4px', cursor:'pointer', fontWeight: adminTab === id ? 700 : 400,
+          fontSize:'0.8rem', fontFamily:'Roboto, sans-serif',
+        }}>{label}</button>
+      );
+
+      // Build detailed API data sources per audit
+      const buildRunSources = (audit) => {
+        const sections = [];
+        const scores = audit.scores || {};
+        const auditFindings = findings.filter(f => f.audit_id === audit.id);
+        const auditGeo = geoSignals.filter(g => g.audit_id === audit.id);
+
+        // 1. Homepage Crawl (HTTP GET)
+        sections.push({
+          section: 'Homepage',
+          api: 'HTTP Crawl',
+          provider: 'Direct',
+          detail: audit.homepage_sections ? `${audit.homepage_sections.found||0}/${audit.homepage_sections.total||0} sections detected` : 'HTML parsed for SEO signals',
+          result: scores.seo ? `SEO: ${scores.seo.score}/100` : null,
+        });
+
+        // 2. Lighthouse / Speed (Apify)
+        if (scores.seo) {
+          sections.push({
+            section: 'Performance',
+            api: 'Apify: Website Speed Checker',
+            provider: 'Apify',
+            actorId: 'onescales/website-speed-checker',
+            detail: `Performance, LCP, CLS, TBT`,
+            result: `SEO ${scores.seo.score}`,
+            link: 'https://console.apify.com/actors/onescales~website-speed-checker',
+          });
+        }
+
+        // 3. Core 30 Analysis (derived from crawl)
+        if (audit.core30_coverage) {
+          const c = audit.core30_coverage;
+          sections.push({
+            section: 'Core 30',
+            api: 'Internal Link Analysis',
+            provider: 'n8n',
+            detail: `${(c.categories_found||0)+(c.services_found||0)} pages found, ${(c.categories_missing||0)+(c.services_missing||0)} missing`,
+            result: `${audit.content_briefs?.length || 0} briefs generated`,
+          });
+        }
+
+        // 4. GEO Signals (derived from crawl)
+        if (auditGeo.length > 0) {
+          const pass = auditGeo.filter(g => g.signal_value).length;
+          sections.push({
+            section: 'GEO Signals',
+            api: 'NAP + Schema Detection',
+            provider: 'n8n',
+            detail: `9 signals checked: schema, NAP, city refs, OG tags, GBP embed`,
+            result: `${pass}/${auditGeo.length} passing (${scores.geo_readiness?.score || 0}%)`,
+          });
+        }
+
+        // 5. AI Probes (Perplexity + ChatGPT)
+        if (aiMentions.length > 0) {
+          const mentioned = aiMentions.filter(m => m.mentioned).length;
+          const engines = [...new Set(aiMentions.map(m => m.engine))];
+          sections.push({
+            section: 'AI Mentions',
+            api: engines.map(e => e === 'chatgpt' ? 'OpenAI ChatGPT' : 'Perplexity').join(' + '),
+            provider: 'OpenAI / Perplexity',
+            detail: `${aiMentions.length} probes across ${engines.length} engine${engines.length > 1 ? 's' : ''}`,
+            result: `${mentioned}/${aiMentions.length} mentioned (${scores.ai_discoverability?.score || 0}%)`,
+          });
+        }
+
+        // 6. Findings (rule engine)
+        if (auditFindings.length > 0) {
+          const open = auditFindings.filter(f => f.status === 'open').length;
+          sections.push({
+            section: 'Findings',
+            api: 'Rule Engine',
+            provider: 'n8n',
+            detail: `${auditFindings.length} findings generated from signals`,
+            result: `${open} open, ${auditFindings.length - open} resolved`,
+          });
+        }
+
+        return sections;
+      };
+
+      // Rank map scans (separate from audits)
+      const rmScans = rankMaps || [];
+
+      const fmtDateTime = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + ' ' + d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+      };
 
       return (
-        <div style={{position:'fixed', top:0, right:0, width:'360px', height:'100vh', background:'#111', borderLeft:'1px solid #333', zIndex:1000, overflowY:'auto', padding:'1.5rem', boxShadow:'-4px 0 20px rgba(0,0,0,0.5)'}}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem'}}>
-            <h3 style={{margin:0}}>Site Settings</h3>
-            <button onClick={onClose} style={{background:'none', border:'none', color:'#888', fontSize:'1.2rem', cursor:'pointer'}}>&times;</button>
-          </div>
-
-          {/* ── Audit Reports & Billing ─────────────────── */}
-          <div style={{background:'#0a0a0a', border:'1px solid #333', borderRadius:'8px', padding:'1rem', marginBottom:'1.5rem'}}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
-              <div>
-                <div style={{fontSize:'0.7rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Reports Used</div>
-                <div style={{fontSize:'1.8rem', fontWeight:700, color:'#fafafa'}}>{totalAudits}</div>
-              </div>
-              <div style={{textAlign:'right'}}>
-                <div style={{fontSize:'0.7rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Total Charged</div>
-                <div style={{fontSize:'1.8rem', fontWeight:700, color:'#4ade80'}}>${totalCharged.toFixed(2)}</div>
-              </div>
+        <div onClick={onClose} style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.6)', zIndex:1000, display:'flex', justifyContent:'center', alignItems:'center', padding:'1rem'}}>
+          <div onClick={e => e.stopPropagation()} style={{background:'#111', border:'1px solid #333', borderRadius:'12px', width:'100%', maxWidth:'720px', maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 8px 40px rgba(0,0,0,0.6)'}}>
+            {/* Header */}
+            <div style={{padding:'1.25rem 1.5rem', borderBottom:'1px solid #333', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0}}>
+              <h3 style={{margin:0}}>Admin</h3>
+              <button onClick={onClose} style={{background:'none', border:'none', color:'#888', fontSize:'1.5rem', cursor:'pointer', lineHeight:1}}>&times;</button>
             </div>
-            <div style={{fontSize:'0.75rem', color:'#555', borderTop:'1px solid #222', paddingTop:'0.5rem'}}>
-              {lastAuditDate ? `Last run: ${lastAuditDate}` : 'No audits yet'} &bull; $2.00/report
+
+            {/* Tab bar */}
+            <div style={{display:'flex', gap:'0.5rem', padding:'0.75rem 1.5rem', borderBottom:'1px solid #222', flexShrink:0}}>
+              {adminTabBtn('runs', 'Audit Runs')}
+              {adminTabBtn('settings', 'Settings')}
+              {adminTabBtn('billing', 'Billing')}
             </div>
-          </div>
 
-          {/* ── Run Audit ──────────────────────────────── */}
-          <button onClick={auditStatus !== 'running' ? runAudit : undefined}
-            disabled={auditStatus === 'running' || !form.domain}
-            style={{
-              width:'100%', padding:'0.65rem', marginBottom:'1.5rem',
-              background: auditStatus === 'running' ? '#333' : '#EA9320',
-              color: auditStatus === 'running' ? '#888' : '#000',
-              border:'none', borderRadius:'6px', fontWeight:700, cursor: auditStatus === 'running' ? 'wait' : 'pointer',
-              fontSize:'0.9rem', fontFamily:'Roboto Slab, serif',
-            }}>
-            {auditStatus === 'running' ? 'Audit Running...' : 'Run Audit'}
-          </button>
+            {/* Content area */}
+            <div style={{overflowY:'auto', padding:'1.5rem', flex:1}}>
 
-          {/* ── Audit Receipts ─────────────────────────── */}
-          {billingRecords.length > 0 && (() => {
-            const logsByAudit = {};
-            usageLogs.forEach(l => {
-              const key = l.audit_id || 'unknown';
-              if (!logsByAudit[key]) logsByAudit[key] = [];
-              logsByAudit[key].push(l);
-            });
+              {/* ── RUNS TAB ─────────────────────────────── */}
+              {adminTab === 'runs' && (
+                <div>
+                  {/* Run Audit button */}
+                  <button onClick={auditStatus !== 'running' ? runAudit : undefined}
+                    disabled={auditStatus === 'running' || !form.domain}
+                    style={{
+                      width:'100%', padding:'0.65rem', marginBottom:'1rem',
+                      background: auditStatus === 'running' ? '#333' : '#EA9320',
+                      color: auditStatus === 'running' ? '#888' : '#000',
+                      border:'none', borderRadius:'6px', fontWeight:700, cursor: auditStatus === 'running' ? 'wait' : 'pointer',
+                      fontSize:'0.9rem', fontFamily:'Roboto Slab, serif',
+                    }}>
+                    {auditStatus === 'running' ? 'Audit Running...' : 'Run New Audit'}
+                  </button>
 
-            return (
-              <div style={{marginBottom:'1.5rem'}}>
-                <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Audit Receipts</h4>
-                {billingRecords.map(bill => {
-                  const logs = logsByAudit[bill.audit_id] || [];
-                  return (
-                    <div key={bill.id} style={{background:'#0a0a0a', border:'1px solid #222', borderRadius:'6px', padding:'0.75rem', marginBottom:'0.5rem'}}>
-                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: logs.length ? '0.5rem' : 0}}>
-                        <span style={{fontSize:'0.8rem', fontWeight:600}}>{bill.audit_date}</span>
-                        <span style={{fontSize:'0.8rem', fontWeight:700, color:'#4ade80'}}>${Number(bill.charge_amount || 0).toFixed(2)}</span>
+                  {/* Live Run Card — shows while audit is in progress */}
+                  {auditStatus === 'running' && (
+                    <LiveRunCard locationId={locationId} onComplete={() => {
+                      setAuditStatus('idle');
+                      setTimeout(() => window.location.reload(), 1500);
+                    }} />
+                  )}
+
+                  {/* Unified chronological timeline: audits + rank map scans */}
+                  {(() => {
+                    // Build unified timeline items
+                    const timeline = [];
+                    audits.forEach(a => {
+                      timeline.push({ type: 'audit', date: a.created_at, data: a });
+                    });
+                    (rmScans || []).forEach(rm => {
+                      timeline.push({ type: 'rankmap', date: rm.created_at || rm.scan_date, data: rm });
+                    });
+                    // Sort chronologically (newest first)
+                    timeline.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                    return (
+                      <div>
+                        <h4 style={{color:'#EA9320', margin:'0 0 1rem', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>
+                          Report Timeline ({timeline.length} events)
+                        </h4>
+                        {timeline.map((item, idx) => {
+                          if (item.type === 'audit') {
+                            const a = item.data;
+                            const sources = buildRunSources(a);
+                            const scores = a.scores || {};
+                            return (
+                              <div key={'a-'+a.id} style={{background:'#0a0a0a', border:'1px solid #222', borderRadius:'8px', padding:'1rem', marginBottom:'1rem', borderLeft:'3px solid #EA9320'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                                  <div>
+                                    <span className="pill" style={{background:'rgba(234,147,32,0.15)', color:'#EA9320', marginRight:'0.5rem', fontSize:'0.7rem'}}>AUDIT</span>
+                                    <span style={{fontWeight:700, fontSize:'1.05rem'}}>{fmtDateTime(a.created_at)}</span>
+                                    <div style={{display:'flex', gap:'0.75rem', marginTop:'0.25rem', fontSize:'0.8rem'}}>
+                                      <span style={{color:'#888'}}>{a.audit_type || 'full'} audit</span>
+                                      {a.triggered_by && <span style={{color:'#555'}}>via {a.triggered_by}</span>}
+                                      {a.crawler_source && <span style={{color:'#555'}}>{a.crawler_source}</span>}
+                                    </div>
+                                  </div>
+                                  <div style={{
+                                    width:'48px', height:'48px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+                                    fontWeight:700, fontSize:'1.1rem', flexShrink:0,
+                                    background: (scores.overall||0) >= 70 ? 'rgba(74,222,128,0.15)' : (scores.overall||0) >= 40 ? 'rgba(234,147,32,0.15)' : 'rgba(248,113,113,0.15)',
+                                    color: (scores.overall||0) >= 70 ? '#4ade80' : (scores.overall||0) >= 40 ? '#EA9320' : '#f87171',
+                                    border: '2px solid ' + ((scores.overall||0) >= 70 ? '#4ade80' : (scores.overall||0) >= 40 ? '#EA9320' : '#f87171'),
+                                  }}>{scores.overall || '\u2014'}</div>
+                                </div>
+                                <div style={{display:'flex', gap:'1rem', marginBottom:'0.75rem', fontSize:'0.8rem', flexWrap:'wrap'}}>
+                                  {scores.seo && <span style={{color:'#60a5fa'}}>SEO {scores.seo.score}</span>}
+                                  {scores.geo_readiness && <span style={{color:'#f97316'}}>GEO {scores.geo_readiness.score}</span>}
+                                  {scores.ai_discoverability && <span style={{color:'#a78bfa'}}>AI {scores.ai_discoverability.score}</span>}
+                                </div>
+                                <div style={{borderTop:'1px solid #1a1a1a', paddingTop:'0.75rem'}}>
+                                  <div style={{fontSize:'0.7rem', color:'#666', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'0.5rem'}}>API Data Sources</div>
+                                  <table style={{width:'100%', fontSize:'0.8rem'}}>
+                                    <thead><tr>
+                                      <th style={{textAlign:'left', padding:'4px 8px', borderBottom:'1px solid #222', fontSize:'0.7rem', color:'#666'}}>Section</th>
+                                      <th style={{textAlign:'left', padding:'4px 8px', borderBottom:'1px solid #222', fontSize:'0.7rem', color:'#666'}}>API Source</th>
+                                      <th style={{textAlign:'left', padding:'4px 8px', borderBottom:'1px solid #222', fontSize:'0.7rem', color:'#666'}}>Result</th>
+                                    </tr></thead>
+                                    <tbody>
+                                      {sources.map((s, i) => (
+                                        <tr key={i} style={{borderBottom:'1px solid #1a1a1a'}}>
+                                          <td style={{padding:'5px 8px', fontWeight:600, color:'#ccc', whiteSpace:'nowrap'}}>{s.section}</td>
+                                          <td style={{padding:'5px 8px'}}>
+                                            <div style={{color:'#EA9320', fontWeight:500}}>{s.api}</div>
+                                            <div style={{color:'#555', fontSize:'0.7rem'}}>{s.detail}</div>
+                                          </td>
+                                          <td style={{padding:'5px 8px', color:'#aaa', whiteSpace:'nowrap'}}>
+                                            {s.link ? <a href={s.link} target="_blank" style={{color:'#EA9320', fontSize:'0.75rem'}}>view</a> : null}
+                                            {s.result && <div>{s.result}</div>}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          } else {
+                            const rm = item.data;
+                            return (
+                              <div key={'rm-'+rm.id} style={{background:'#0a0a0a', border:'1px solid #222', borderRadius:'8px', padding:'1rem', marginBottom:'1rem', borderLeft:'3px solid #60a5fa'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.5rem'}}>
+                                  <div>
+                                    <span className="pill" style={{background:'rgba(96,165,250,0.15)', color:'#60a5fa', marginRight:'0.5rem', fontSize:'0.7rem'}}>RANK MAP</span>
+                                    <span style={{fontWeight:700, fontSize:'1.05rem'}}>{fmtDateTime(rm.created_at || rm.scan_date)}</span>
+                                    <span style={{color:'#888', fontSize:'0.8rem', marginLeft:'0.75rem'}}>"{rm.keyword}"</span>
+                                  </div>
+                                  <span style={{color:'#EA9320', fontWeight:700}}>{rm.top_3_pct}% top-3</span>
+                                </div>
+                                <table style={{width:'100%', fontSize:'0.8rem'}}>
+                                  <tbody>
+                                    <tr style={{borderBottom:'1px solid #1a1a1a'}}>
+                                      <td style={{padding:'4px 8px', fontWeight:600, color:'#ccc'}}>Rank Map</td>
+                                      <td style={{padding:'4px 8px'}}>
+                                        <div style={{color:'#EA9320', fontWeight:500}}>DataForSEO Maps API</div>
+                                        <div style={{color:'#555', fontSize:'0.7rem'}}>{rm.grid_size} grid, {rm.total_points} API calls, {rm.grid_radius_mi || 5}mi radius</div>
+                                      </td>
+                                      <td style={{padding:'4px 8px', color:'#aaa'}}>Avg #{rm.avg_rank || '\u2014'}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          }
+                        })}
                       </div>
-                      {logs.length > 0 && (
-                        <div style={{borderTop:'1px solid #1a1a1a', paddingTop:'0.4rem'}}>
-                          {logs.map(l => (
-                            <div key={l.id} style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', color:'#888', padding:'0.15rem 0'}}>
-                              <span style={{display:'flex', alignItems:'center', gap:'0.3rem'}}>
-                                <span style={{width:'6px', height:'6px', borderRadius:'50%', background: l.status === 'success' ? '#4ade80' : l.status === 'error' ? '#f87171' : '#fbbf24', display:'inline-block'}} />
-                                {l.actor_name}
-                              </span>
-                              <span style={{display:'flex', gap:'0.75rem'}}>
-                                {l.items_returned != null && <span>{l.items_returned} items</span>}
-                                {l.duration_ms != null && <span>{(l.duration_ms/1000).toFixed(1)}s</span>}
-                                {l.cost_usd != null && <span>${Number(l.cost_usd).toFixed(4)}</span>}
-                              </span>
-                            </div>
-                          ))}
-                          <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', color:'#555', borderTop:'1px solid #1a1a1a', paddingTop:'0.3rem', marginTop:'0.3rem'}}>
-                            <span>{logs.length} search{logs.length !== 1 ? 'es' : ''}</span>
-                            <span>Cost: ${Number(bill.total_cost || 0).toFixed(4)}</span>
-                          </div>
-                        </div>
-                      )}
-                      {logs.length === 0 && bill.apify_runs && (
-                        <div style={{borderTop:'1px solid #1a1a1a', paddingTop:'0.4rem'}}>
-                          {(Array.isArray(bill.apify_runs) ? bill.apify_runs : []).map((r, i) => (
-                            <div key={i} style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', color:'#888', padding:'0.15rem 0'}}>
-                              <span style={{display:'flex', alignItems:'center', gap:'0.3rem'}}>
-                                <span style={{width:'6px', height:'6px', borderRadius:'50%', background: r.status === 'success' ? '#4ade80' : '#fbbf24', display:'inline-block'}} />
-                                {r.actor || r.name || 'API call'}
-                              </span>
-                              <span>{r.items || 0} items</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* ── SETTINGS TAB ─────────────────────────── */}
+              {adminTab === 'settings' && (
+                <div>
+                  <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Business Info</h4>
+                  <div style={{marginBottom:'1rem'}}>
+                    <label style={labelStyle}>Domain</label>
+                    <input style={inputStyle} value={form.domain} onChange={e => set('domain', e.target.value)} />
+                  </div>
+                  <div style={{marginBottom:'1rem'}}>
+                    <label style={labelStyle}>Phone</label>
+                    <input style={inputStyle} value={form.phone} onChange={e => set('phone', e.target.value)} />
+                  </div>
+                  <div style={{marginBottom:'1rem'}}>
+                    <label style={labelStyle}>Address</label>
+                    <input style={inputStyle} value={form.address} onChange={e => set('address', e.target.value)} />
+                  </div>
+                  <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.5rem'}}>
+                    <div style={{flex:2}}>
+                      <label style={labelStyle}>City</label>
+                      <input style={inputStyle} value={form.city} onChange={e => set('city', e.target.value)} />
                     </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+                    <div style={{flex:1}}>
+                      <label style={labelStyle}>State</label>
+                      <input style={inputStyle} value={form.state} onChange={e => set('state', e.target.value)} />
+                    </div>
+                  </div>
 
-          {/* ── Business Info ──────────────────────────── */}
-          <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Business Info</h4>
-          <div style={{marginBottom:'1rem'}}>
-            <label style={labelStyle}>Domain</label>
-            <input style={inputStyle} value={form.domain} onChange={e => set('domain', e.target.value)} />
-          </div>
-          <div style={{marginBottom:'1rem'}}>
-            <label style={labelStyle}>Phone</label>
-            <input style={inputStyle} value={form.phone} onChange={e => set('phone', e.target.value)} />
-          </div>
-          <div style={{marginBottom:'1rem'}}>
-            <label style={labelStyle}>Address</label>
-            <input style={inputStyle} value={form.address} onChange={e => set('address', e.target.value)} />
-          </div>
-          <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.5rem'}}>
-            <div style={{flex:2}}>
-              <label style={labelStyle}>City</label>
-              <input style={inputStyle} value={form.city} onChange={e => set('city', e.target.value)} />
+                  <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Social Profiles</h4>
+                  <div style={{marginBottom:'1rem'}}>
+                    <label style={labelStyle}>Instagram Handle</label>
+                    <input style={inputStyle} placeholder="username" value={form.ig} onChange={e => set('ig', e.target.value)} />
+                  </div>
+                  <div style={{marginBottom:'1rem'}}>
+                    <label style={labelStyle}>Facebook Page</label>
+                    <input style={inputStyle} placeholder="pagename" value={form.fb} onChange={e => set('fb', e.target.value)} />
+                  </div>
+                  <div style={{marginBottom:'1rem'}}>
+                    <label style={labelStyle}>TikTok Handle</label>
+                    <input style={inputStyle} placeholder="username" value={form.tt} onChange={e => set('tt', e.target.value)} />
+                  </div>
+                  <div style={{marginBottom:'1rem'}}>
+                    <label style={labelStyle}>Google Business URL</label>
+                    <input style={inputStyle} placeholder="https://maps.google.com/..." value={form.google_url} onChange={e => set('google_url', e.target.value)} />
+                  </div>
+                  <div style={{marginBottom:'1.5rem'}}>
+                    <label style={labelStyle}>Yelp Business URL</label>
+                    <input style={inputStyle} placeholder="https://yelp.com/biz/..." value={form.yelp_url} onChange={e => set('yelp_url', e.target.value)} />
+                  </div>
+
+                  <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>API Keys</h4>
+                  <div style={{marginBottom:'1.5rem'}}>
+                    <label style={labelStyle}>Microsoft Clarity API Token</label>
+                    <input style={{...inputStyle, fontFamily:'monospace', fontSize:'0.75rem'}} placeholder="JWT token from Clarity Settings > Data Export" value={form.clarity_token} onChange={e => set('clarity_token', e.target.value)} />
+                    <div style={{fontSize:'0.7rem', color:'#555', marginTop:'0.25rem'}}>Get from <a href="https://clarity.microsoft.com" target="_blank">clarity.microsoft.com</a> &rarr; Settings &rarr; Data Export</div>
+                  </div>
+
+                  <button onClick={save} disabled={saving} style={{
+                    width:'100%', padding:'0.6rem', background: saved ? '#4ade80' : '#EA9320', color:'#000',
+                    border:'none', borderRadius:'4px', fontWeight:600, cursor: saving ? 'wait' : 'pointer', fontSize:'0.9rem',
+                  }}>
+                    {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
+                  </button>
+                </div>
+              )}
+
+              {/* ── BILLING TAB ──────────────────────────── */}
+              {adminTab === 'billing' && (
+                <div>
+                  {/* Summary cards */}
+                  {(() => {
+                    const totalAudits = billingRecords.length || audits.length;
+                    const totalCharged = billingRecords.reduce((s, b) => s + Number(b.charge_amount || 0), 0);
+                    const totalCost = billingRecords.reduce((s, b) => s + Number(b.total_cost || 0), 0);
+                    return (
+                      <div style={{display:'flex', gap:'1rem', marginBottom:'1.5rem'}}>
+                        <div style={{flex:1, background:'#0a0a0a', border:'1px solid #333', borderRadius:'8px', padding:'1rem', textAlign:'center'}}>
+                          <div style={{fontSize:'0.7rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Reports Run</div>
+                          <div style={{fontSize:'2rem', fontWeight:700}}>{totalAudits}</div>
+                        </div>
+                        <div style={{flex:1, background:'#0a0a0a', border:'1px solid #333', borderRadius:'8px', padding:'1rem', textAlign:'center'}}>
+                          <div style={{fontSize:'0.7rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>Total Charged</div>
+                          <div style={{fontSize:'2rem', fontWeight:700, color:'#4ade80'}}>${totalCharged.toFixed(2)}</div>
+                        </div>
+                        <div style={{flex:1, background:'#0a0a0a', border:'1px solid #333', borderRadius:'8px', padding:'1rem', textAlign:'center'}}>
+                          <div style={{fontSize:'0.7rem', color:'#888', textTransform:'uppercase', letterSpacing:'0.5px'}}>API Cost</div>
+                          <div style={{fontSize:'2rem', fontWeight:700, color:'#fbbf24'}}>${totalCost.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div style={{fontSize:'0.8rem', color:'#555', marginBottom:'1.5rem'}}>
+                    {lastAuditDate ? `Last run: ${lastAuditDate}` : 'No audits yet'} &bull; Rate: $2.00/report
+                  </div>
+
+                  {/* Billing receipts */}
+                  {billingRecords.length > 0 && (() => {
+                    const logsByAudit = {};
+                    usageLogs.forEach(l => {
+                      const key = l.audit_id || 'unknown';
+                      if (!logsByAudit[key]) logsByAudit[key] = [];
+                      logsByAudit[key].push(l);
+                    });
+                    return (
+                      <div>
+                        <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Receipts</h4>
+                        {billingRecords.map(bill => {
+                          const logs = logsByAudit[bill.audit_id] || [];
+                          return (
+                            <div key={bill.id} style={{background:'#0a0a0a', border:'1px solid #222', borderRadius:'6px', padding:'0.75rem', marginBottom:'0.5rem'}}>
+                              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: logs.length ? '0.5rem' : 0}}>
+                                <span style={{fontSize:'0.8rem', fontWeight:600}}>{bill.audit_date}</span>
+                                <span style={{fontSize:'0.8rem', fontWeight:700, color:'#4ade80'}}>${Number(bill.charge_amount || 0).toFixed(2)}</span>
+                              </div>
+                              {logs.length > 0 && (
+                                <div style={{borderTop:'1px solid #1a1a1a', paddingTop:'0.4rem'}}>
+                                  {logs.map(l => (
+                                    <div key={l.id} style={{display:'flex', justifyContent:'space-between', fontSize:'0.7rem', color:'#888', padding:'0.15rem 0'}}>
+                                      <span style={{display:'flex', alignItems:'center', gap:'0.3rem'}}>
+                                        <span style={{width:'6px', height:'6px', borderRadius:'50%', background: l.status === 'success' ? '#4ade80' : l.status === 'error' ? '#f87171' : '#fbbf24', display:'inline-block'}} />
+                                        {l.actor_name}
+                                      </span>
+                                      <span style={{display:'flex', gap:'0.75rem'}}>
+                                        {l.items_returned != null && <span>{l.items_returned} items</span>}
+                                        {l.duration_ms != null && <span>{(l.duration_ms/1000).toFixed(1)}s</span>}
+                                        {l.cost_usd != null && <span>${Number(l.cost_usd).toFixed(4)}</span>}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  {billingRecords.length === 0 && (
+                    <p style={{color:'#555', textAlign:'center', padding:'2rem 0'}}>No billing records yet. Billing starts after first paid audit.</p>
+                  )}
+                </div>
+              )}
             </div>
-            <div style={{flex:1}}>
-              <label style={labelStyle}>State</label>
-              <input style={inputStyle} value={form.state} onChange={e => set('state', e.target.value)} />
-            </div>
           </div>
-
-          <h4 style={{color:'#EA9320', margin:'0 0 0.75rem 0', fontSize:'0.85rem', textTransform:'uppercase', letterSpacing:'0.5px'}}>Social Profiles</h4>
-          <div style={{marginBottom:'1rem'}}>
-            <label style={labelStyle}>Instagram Handle</label>
-            <input style={inputStyle} placeholder="username" value={form.ig} onChange={e => set('ig', e.target.value)} />
-          </div>
-          <div style={{marginBottom:'1rem'}}>
-            <label style={labelStyle}>Facebook Page</label>
-            <input style={inputStyle} placeholder="pagename" value={form.fb} onChange={e => set('fb', e.target.value)} />
-          </div>
-          <div style={{marginBottom:'1rem'}}>
-            <label style={labelStyle}>TikTok Handle</label>
-            <input style={inputStyle} placeholder="username" value={form.tt} onChange={e => set('tt', e.target.value)} />
-          </div>
-          <div style={{marginBottom:'1rem'}}>
-            <label style={labelStyle}>Google Business URL</label>
-            <input style={inputStyle} placeholder="https://maps.google.com/..." value={form.google_url} onChange={e => set('google_url', e.target.value)} />
-          </div>
-          <div style={{marginBottom:'1.5rem'}}>
-            <label style={labelStyle}>Yelp Business URL</label>
-            <input style={inputStyle} placeholder="https://yelp.com/biz/..." value={form.yelp_url} onChange={e => set('yelp_url', e.target.value)} />
-          </div>
-
-          <button onClick={save} disabled={saving} style={{
-            width:'100%', padding:'0.6rem', background: saved ? '#4ade80' : '#EA9320', color: saved ? '#000' : '#000',
-            border:'none', borderRadius:'4px', fontWeight:600, cursor: saving ? 'wait' : 'pointer', fontSize:'0.9rem',
-          }}>
-            {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
-          </button>
         </div>
+      );
+    }
+
+    /* ── FetchNewButton — per-section refresh via n8n webhook ── */
+    function FetchNewButton({ locationId, section, label, onRefresh }) {
+      const [state, setState] = React.useState('idle'); // idle | fetching | done | error
+      const [progress, setProgress] = React.useState(null);
+      const channelRef = React.useRef(null);
+
+      const start = async () => {
+        setState('fetching');
+        setProgress({ step: 'Starting...', pct: 0 });
+
+        // Subscribe to Supabase Realtime for progress updates
+        const channel = db.channel(`section-${section}-${Date.now()}`)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'audit_progress',
+            filter: `location_id=eq.${locationId}`,
+          }, (payload) => {
+            const row = payload.new;
+            if (row && row.section === section) {
+              setProgress({ step: row.step, pct: row.pct || 0 });
+              if (row.step === 'complete') {
+                setState('done');
+                setTimeout(() => { setState('idle'); setProgress(null); }, 2000);
+                if (onRefresh) onRefresh();
+                channel.unsubscribe();
+              }
+            }
+          })
+          .subscribe();
+        channelRef.current = channel;
+
+        // Fire the webhook (don't await — it's async)
+        try {
+          fetch('https://tn.reinventingai.com/webhook/section-refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ locationId, section }),
+          }).catch(() => {});
+        } catch (e) { /* fire and forget */ }
+
+        // Safety timeout — if no complete after 120s, reset
+        setTimeout(() => {
+          if (channelRef.current) channelRef.current.unsubscribe();
+          setState(prev => prev === 'fetching' ? 'error' : prev);
+        }, 120000);
+      };
+
+      React.useEffect(() => {
+        return () => { if (channelRef.current) channelRef.current.unsubscribe(); };
+      }, []);
+
+      const colors = { idle: '#EA9320', fetching: '#60a5fa', done: '#4ade80', error: '#f87171' };
+      const labels = { idle: label || 'Fetch New', fetching: progress?.step || 'Checking...', done: 'Done!', error: 'Timeout' };
+
+      return (
+        <button onClick={state === 'idle' || state === 'error' ? start : undefined} disabled={state === 'fetching'} style={{
+          background: state === 'idle' ? '#EA9320' : state === 'done' ? '#4ade80' : state === 'error' ? '#f87171' : '#3b82f6',
+          border: 'none',
+          borderRadius: '8px', padding: '0.5rem 1.2rem', cursor: state === 'fetching' ? 'wait' : 'pointer',
+          color: '#000', fontSize: '0.8rem', fontWeight: 700,
+          fontFamily: 'Roboto, sans-serif', transition: 'all 0.2s',
+          display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+        }}>
+          {state === 'fetching' && <span style={{display:'inline-block', width:12, height:12, border:'2px solid #60a5fa', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 1s linear infinite'}} />}
+          {state === 'done' && '\u2713'}
+          {state === 'error' && '\u26A0'}
+          {labels[state]}
+          {state === 'fetching' && progress?.pct > 0 && <span style={{color:'#888'}}>({progress.pct}%)</span>}
+        </button>
       );
     }
 
@@ -1600,6 +2702,22 @@
         return () => { canceled = true; };
       }, [locationId]);
 
+      // Section refreshers — re-fetch a single table after n8n updates it
+      const refreshSection = React.useCallback(async (section) => {
+        if (!site) return;
+        const id = site.id;
+        const fetchers = {
+          directories: async () => { const { data } = await db.from('directory_listings').select('*').eq('site_id', id); if (data) setDirectoryListings(data); },
+          rankmap: async () => { const { data } = await db.from('rank_maps').select('*').eq('site_id', id).order('scan_date', {ascending:false}); if (data) setRankMaps(data); },
+          competitors: async () => { const { data } = await db.from('competitors').select('*').eq('site_id', id).order('created_at', {ascending:false}); if (data) setCompetitors(data); },
+          findings: async () => { const { data } = await db.from('findings').select('*').eq('site_id', id); if (data) setFindings(data); },
+          geo: async () => { const { data } = await db.from('geo_signals').select('*').eq('site_id', id); if (data) setGeoSignals(data); },
+          ai: async () => { const { data } = await db.from('ai_mentions').select('*').eq('site_id', id); if (data) setAiMentions(data); },
+          keywords: async () => { /* keyword_suggestions fetched separately */ },
+        };
+        if (fetchers[section]) await fetchers[section]();
+      }, [site]);
+
       if (!locationId) return <div className="container"><h2>Missing location parameter</h2><p>Add ?locationId=YOUR_GHL_LOCATION_ID to the URL</p></div>;
       if (loading) return <div className="container" style={{textAlign:'center',paddingTop:'4rem'}}><h2>Loading dashboard...</h2></div>;
 
@@ -1661,7 +2779,6 @@
 
       const openFindings = latestFindings.filter(f => f.status === 'open').length;
       const dirNeedsAtt = directoryListings.filter(l => l.status !== 'listed').length;
-      const pendingLinks = linkChecklist.filter(l => l.status !== 'done').length;
       const missingPages = (core30?.categories_missing||0) + (core30?.services_missing||0);
 
       const hpMissing = homepageSections?.missing || 0;
@@ -1671,12 +2788,10 @@
         { id:'homepage', label:'Homepage', badge: hpMissing > 0 ? hpMissing : null },
         { id:'rankmap', label:'Rank Map', badge: latestRankMap ? latestRankMap.top_3_pct+'%' : null },
         { id:'core30', label:'Core 30', badge: missingPages > 0 ? missingPages : null },
-        { id:'findings', label:'Findings', badge: openFindings || null },
-        { id:'geo', label:'GEO' },
-        { id:'ai', label:'AI' },
-        { id:'links', label:'Link Checklist', badge: pendingLinks || null },
-        { id:'directories', label:'Directories', badge: dirNeedsAtt || null },
+        { id:'insights', label:'Insights', badge: openFindings || null },
+        { id:'directories', label:'Directories & Links', badge: dirNeedsAtt || null },
         { id:'competitors', label:'Competitors' },
+        { id:'clarity', label:'Clarity', badge: site.social_links?.clarity_token ? null : null },
       ];
 
       return (
@@ -1691,9 +2806,9 @@
               borderRadius:'6px', padding:'0.5rem 1rem',
               color: settingsOpen ? '#000' : '#888', cursor:'pointer', fontSize:'0.85rem', fontWeight:600,
               fontFamily:'Roboto, sans-serif', marginTop:'0.25rem', transition:'all 0.2s',
-            }}>{settingsOpen ? 'Close' : 'Settings'}</button>
+            }}>{settingsOpen ? 'Close' : 'Admin'}</button>
           </header>
-          <SettingsPanel site={site} open={settingsOpen} onClose={() => setSettingsOpen(false)} billingRecords={billingRecords} usageLogs={usageLogs} locationId={locationId} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} />
+          <AdminPanel site={site} open={settingsOpen} onClose={() => setSettingsOpen(false)} billingRecords={billingRecords} usageLogs={usageLogs} locationId={locationId} lastAuditDate={latest.audit_date} onAuditStarted={() => setAuditRunning(true)} audits={audits} findings={findings} geoSignals={geoSignals} aiMentions={aiMentions} rankMaps={rankMaps} />
 
           <nav className="tab-bar">
             {tabs.map(t => (
@@ -1706,14 +2821,12 @@
 
           {activeTab === 'overview' && <OverviewTab scores={scores} delta={delta} chartData={chartData} quickWins={quickWins} rankMap={latestRankMap} core30={core30} homepageSections={homepageSections} apifyResults={latest.apify_results || {}} />}
           {activeTab === 'homepage' && <HomepageTab homepageSections={homepageSections} />}
-          {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} />}
+          {activeTab === 'rankmap' && <RankMapTab rankMaps={rankMaps} locationId={locationId} onRefresh={() => refreshSection('rankmap')} />}
           {activeTab === 'core30' && <Core30Tab core30={core30} contentBriefs={contentBriefs} />}
-          {activeTab === 'findings' && <FindingsTab latestFindings={latestFindings} />}
-          {activeTab === 'geo' && <GeoTab latestGeo={latestGeo} />}
-          {activeTab === 'ai' && <AITab aiMentions={aiMentions} businessName={site.business_name} />}
-          {activeTab === 'links' && <LinkChecklistTab links={linkChecklist} />}
-          {activeTab === 'directories' && <DirectoryTab listings={directoryListings} site={site} />}
-          {activeTab === 'competitors' && <CompetitorsTab competitors={competitors} site={site} aiMentions={aiMentions} />}
+          {activeTab === 'insights' && <InsightsTab latestFindings={latestFindings} latestGeo={latestGeo} aiMentions={aiMentions} businessName={site.business_name} locationId={locationId} onRefresh={refreshSection} />}
+          {activeTab === 'directories' && <DirectoryTab listings={directoryListings} site={site} locationId={locationId} onRefresh={() => refreshSection('directories')} links={linkChecklist} />}
+          {activeTab === 'competitors' && <CompetitorsTab competitors={competitors} site={site} aiMentions={aiMentions} locationId={locationId} onRefresh={() => refreshSection('competitors')} />}
+          {activeTab === 'clarity' && <ClarityTab clarityToken={site.social_links?.clarity_token} />}
 
           <footer style={{marginTop:'2rem', padding:'1rem 0', borderTop:'1px solid #222', fontSize:'0.8rem', color:'#666'}}>
             Powered by <a href="https://tattoonow.com" target="_blank">TattooNOW</a> &bull; Site Audit System v3.0

@@ -1,7 +1,7 @@
 # STATE.md — TattooNOW Site Audit System v3
 
 > Authoritative reference for the architecture, data model, scoring methodology, and operational state of the audit system.
-> Last updated: 2026-03-03
+> Last updated: 2026-03-05
 
 ---
 
@@ -35,7 +35,7 @@
 |-------------|-----------------------------------|
 | Database     | Supabase (hosted Postgres + RLS) — project `dwoqhaaugczqsymfirqu` |
 | Dashboard    | React 18 (CDN), Recharts, Babel standalone — GitHub Pages `TattooNOW/site-audit` |
-| Automation   | n8n cloud (`tn.reinventingai.com`) — 1 primary workflow |
+| Automation   | n8n cloud (`tn.reinventingai.com`) — 2 workflows (audit + section refresh) |
 | Scripts (CLI)| Node.js 18+ — `site-audit/scripts/` (backup pipeline) |
 | Parsing      | Cheerio (CLI), regex-based (n8n) |
 | APIs         | Google Places API (New), Local Falcon |
@@ -223,6 +223,34 @@ AI discoverability probe results.
 
 ---
 
+### 2.10 `keyword_suggestions`
+
+Stores discovered keywords from DataForSEO for rank map tracking.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | |
+| site_id | uuid FK → sites | |
+| keyword | text | Search term |
+| search_volume | integer | Monthly search volume |
+| competition | numeric(4,3) | 0-1 competition score |
+| source | text | Default 'dataforseo' |
+| discovered_at | timestamptz | |
+| selected | boolean | Whether tracked in rank maps |
+| UNIQUE(site_id, keyword) | | |
+
+### 2.11 `audit_progress`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| location_id | text | GHL location ID |
+| step | text | Progress label (e.g., "Checking Yelp...", "complete") |
+| pct | integer | 0-100 percentage |
+| section | text | 'full' for main audit, 'directories'/'competitors' etc. for section refresh |
+| created_at | timestamptz | |
+
+---
+
 ## 3. Scoring Methodology
 
 ### 3.1 SEO Score (0-100)
@@ -401,6 +429,31 @@ Scripts stored in `/tmp/` (ephemeral):
 
 ---
 
+## 4b. n8n Workflow: Section Refresh
+
+**Workflow ID**: `hy9iuxyMcENjRO7H`
+**Webhook**: `POST https://tn.reinventingai.com/webhook/section-refresh`
+**Body**: `{ "locationId": "...", "section": "directories|competitors|findings|geo|ai|rankmap_keywords" }`
+
+### Nodes (3)
+1. **Webhook** — POST, responds via responseNode
+2. **Respond Immediately** — Returns `{"status":"started"}` immediately
+3. **Lookup & Route** (Code) — Looks up site, routes by section, executes checks
+
+### Directory Verification Branch
+- Fetches `directory_listings` with status `not_listed` or `needs_claim`
+- HTTP-checks each platform's search URL for the business name
+- Updates status to `listed` if found
+- Writes progress to `audit_progress` table with `section: "directories"`
+- Platforms checked: Yelp, BBB, YellowPages, Foursquare, MapQuest, Manta, Superpages, TripAdvisor, Tattoodo
+- Some platforms (TripAdvisor, Manta, Superpages) return 403 — need Apify for JS-rendered checks
+
+### Pending Branches
+- **rankmap_keywords**: DataForSEO keyword discovery (needs API key)
+- **competitors**: Map outranker extraction from rank_map grid_data
+
+---
+
 ## 5. Dashboard
 
 ### 5.1 Deployment
@@ -416,14 +469,17 @@ Scripts stored in `/tmp/` (ephemeral):
 |---|-----|-----------|-------------|
 | 1 | Overview | audits, rank_maps | 4 score cards (SEO/AI/GEO/Overall), Core 30 bar, timeline chart, quick wins, GBP health |
 | 2 | Homepage | audits.homepage_sections | 12 section cards (found/missing), search volume recommendations, critical missing count |
-| 3 | Rank Map | rank_maps | Grid heatmap, stats cards, trend line |
+| 3 | Rank Map | rank_maps | Grid heatmap, stats cards, trend line, **Discover Keywords** button |
 | 4 | Core 30 | audits.core30_coverage, content_briefs | Coverage bars, content pipeline table |
-| 5 | Findings | findings | Filterable table (severity/status/category/layer) |
-| 6 | GEO | geo_signals | Grouped signal cards (Schema/On-Page/NAP) with details, score |
-| 7 | AI | ai_mentions | Engine/query/mentioned table |
-| 8 | Link Checklist | link_checklist | Priority table, built/total counter, type filter |
-| 9 | Competitors | competitors, sites | Benchmark table, color-coded vs client |
-| 10 | Directories | directory_listings | Status cards, NAP Match %, tier filtering, claim/register URLs (~35 platforms) |
+| 5 | Insights | findings + geo_signals + ai_mentions | **3 sub-tabs** with colored backgrounds: Findings (table), GEO (table), AI (table). Each has **Re-scan** button |
+| 6 | Clarity | MS Clarity | Heatmaps, session replays (own refresh) |
+| 7 | Link Checklist | link_checklist | Category tabs (authority/directory/sponsorship), deduped against directory_listings |
+| 8 | Directories | directory_listings | Status cards, NAP Match %, **Verify Listings** button, Manage links for listed platforms |
+| 9 | Competitors | competitors, sites | Benchmark table, color-coded vs client, **Refresh** button |
+
+### 5.2b FetchNewButton Component
+
+Reusable per-section refresh button. States: `idle → fetching → done`. Subscribes to Supabase Realtime on `audit_progress` filtered by `section`. Fires webhook to `/webhook/section-refresh`. On completion, calls section-specific refresher to re-query just that Supabase table.
 
 ### 5.3 Dashboard Data Flow
 
